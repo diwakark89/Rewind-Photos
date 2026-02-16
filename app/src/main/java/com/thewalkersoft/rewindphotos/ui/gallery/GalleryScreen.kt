@@ -1,5 +1,6 @@
 package com.thewalkersoft.rewindphotos.ui.gallery
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,9 +28,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
 import com.thewalkersoft.rewindphotos.domain.model.Photo
-import com.thewalkersoft.rewindphotos.ui.photos.PhotosUiState
-import com.thewalkersoft.rewindphotos.ui.photos.PhotosViewModel
 import com.thewalkersoft.rewindphotos.ui.theme.RewindPhotosTheme
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -38,12 +38,20 @@ import java.util.Locale
 /**
  * Gallery screen displaying a grid of photos.
  * Uses LazyVerticalGrid for efficient scrolling with 3 columns.
- * Integrates with PhotosViewModel to fetch and display photos from MediaStore.
+ * Integrates with GalleryViewModel to fetch and display photos from MediaStore.
+ *
+ * Features:
+ * - Displays photos in a 3-column grid layout
+ * - Shows newest photos first (sorted by date taken descending)
+ * - Lazy loading with stable keys for optimal performance
+ * - Material 3 card design with proper spacing
+ * - Handles permission denial gracefully
+ * - Supports navigation on photo click
  */
 @Composable
 fun GalleryScreen(
     modifier: Modifier = Modifier,
-    viewModel: PhotosViewModel = hiltViewModel(),
+    viewModel: GalleryViewModel = hiltViewModel(),
     hasPermission: Boolean = false,
     onPhotoClick: (Photo) -> Unit = {}
 ) {
@@ -87,9 +95,9 @@ fun GalleryScreen(
  * Handles different UI states: Loading, Empty, Success, and Error.
  */
 @Composable
-private fun GalleryScreenContent(
+internal fun GalleryScreenContent(
     modifier: Modifier = Modifier,
-    uiState: PhotosUiState,
+    uiState: GalleryUiState,
     onPhotoClick: (Photo) -> Unit = {},
     onRetry: () -> Unit = {}
 ) {
@@ -98,15 +106,15 @@ private fun GalleryScreenContent(
         contentAlignment = Alignment.Center
     ) {
         when (uiState) {
-            is PhotosUiState.Loading -> {
+            is GalleryUiState.Loading -> {
                 LoadingState()
             }
 
-            is PhotosUiState.Empty -> {
+            is GalleryUiState.Empty -> {
                 EmptyState()
             }
 
-            is PhotosUiState.Success -> {
+            is GalleryUiState.Success -> {
                 PhotoGrid(
                     photos = uiState.photos,
                     onPhotoClick = onPhotoClick,
@@ -114,7 +122,7 @@ private fun GalleryScreenContent(
                 )
             }
 
-            is PhotosUiState.Error -> {
+            is GalleryUiState.Error -> {
                 ErrorState(message = uiState.message, onRetry = onRetry)
             }
         }
@@ -231,7 +239,7 @@ private fun PhotoGrid(
 
 /**
  * Individual photo card with Material 3 design.
- * Displays the image using Coil's AsyncImage for efficient loading.
+ * Displays the image using Coil's SubcomposeAsyncImage for efficient loading with progress indicator.
  */
 @Composable
 private fun PhotoCard(
@@ -239,25 +247,50 @@ private fun PhotoCard(
     photo: Photo,
     onPhotoClick: () -> Unit = {}
 ) {
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable { onPhotoClick() }
-            .size(120.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        shape = MaterialTheme.shapes.medium
-    ) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
+    Box(modifier = modifier.size(120.dp)) {
+        Card(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable { onPhotoClick() },
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+            shape = MaterialTheme.shapes.medium
         ) {
-            // Async image loading using Coil
-            AsyncImage(
-                model = photo.uri,
-                contentDescription = "Photo taken on ${formatDate(photo.dateTaken)}",
+            Box(
                 modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
+                contentAlignment = Alignment.Center
+            ) {
+                // Async image loading using Coil with progress indicator
+                SubcomposeAsyncImage(
+                    model = photo.uri,
+                    contentDescription = "Photo taken on ${formatDate(photo.dateTaken)}",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                    loading = {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(32.dp),
+                                strokeWidth = 2.dp
+                            )
+                        }
+                    },
+                    error = {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(MaterialTheme.colorScheme.errorContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "Failed to load",
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    }
+                )
+            }
         }
     }
 }
@@ -277,72 +310,72 @@ private fun formatDate(timestamp: Long): String {
 // ============= PREVIEW COMPOSABLES WITH MOCK DATA =============
 
 /**
- * Mock data for preview
+ * Mock data for gallery preview testing
  */
-private val mockPhotos = listOf(
-    Photo(1, "content://media/external/images/media/1", 1707873600000, "/storage/emulated/0/DCIM/Camera/photo1.jpg"),
-    Photo(2, "content://media/external/images/media/2", 1707787200000, "/storage/emulated/0/DCIM/Camera/photo2.jpg"),
-    Photo(3, "content://media/external/images/media/3", 1707700800000, "/storage/emulated/0/DCIM/Camera/photo3.jpg"),
-    Photo(4, "content://media/external/images/media/4", 1707614400000, "/storage/emulated/0/DCIM/Camera/photo4.jpg"),
-    Photo(5, "content://media/external/images/media/5", 1707528000000, "/storage/emulated/0/DCIM/Camera/photo5.jpg"),
-    Photo(6, "content://media/external/images/media/6", 1707441600000, "/storage/emulated/0/DCIM/Camera/photo6.jpg"),
-    Photo(7, "content://media/external/images/media/7", 1707355200000, "/storage/emulated/0/DCIM/Camera/photo7.jpg"),
-    Photo(8, "content://media/external/images/media/8", 1707268800000, "/storage/emulated/0/DCIM/Camera/photo8.jpg"),
-    Photo(9, "content://media/external/images/media/9", 1707182400000, "/storage/emulated/0/DCIM/Camera/photo9.jpg"),
+internal val GalleryGridPreviewMockPhotos = listOf(
+    Photo(1, "content://media/external/images/media/1", 1707873600000, "/storage/emulated/0/DCIM/Camera/IMG_20240214_085015.jpg"),
+    Photo(2, "content://media/external/images/media/2", 1707787200000, "/storage/emulated/0/DCIM/Camera/IMG_20240213_143022.jpg"),
+    Photo(3, "content://media/external/images/media/3", 1707700800000, "/storage/emulated/0/DCIM/Camera/IMG_20240212_092556.jpg"),
+    Photo(4, "content://media/external/images/media/4", 1707614400000, "/storage/emulated/0/DCIM/Camera/IMG_20240211_175430.jpg"),
+    Photo(5, "content://media/external/images/media/5", 1707528000000, "/storage/emulated/0/DCIM/Camera/IMG_20240210_063141.jpg"),
+    Photo(6, "content://media/external/images/media/6", 1707441600000, "/storage/emulated/0/DCIM/Camera/IMG_20240209_154522.jpg"),
+    Photo(7, "content://media/external/images/media/7", 1707355200000, "/storage/emulated/0/DCIM/Camera/IMG_20240208_130015.jpg"),
+    Photo(8, "content://media/external/images/media/8", 1707268800000, "/storage/emulated/0/DCIM/Camera/IMG_20240207_091842.jpg"),
+    Photo(9, "content://media/external/images/media/9", 1707182400000, "/storage/emulated/0/DCIM/Camera/IMG_20240206_175333.jpg"),
 )
 
 /**
- * Preview of the gallery screen with mock data in success state
+ * Preview of the gallery grid in loading state
  */
 @Preview(showBackground = true, device = "id:pixel_5")
 @Composable
-fun GalleryScreenLoadingPreview() {
+fun GalleryGridLoadingPreview() {
     RewindPhotosTheme {
         GalleryScreenContent(
             modifier = Modifier.fillMaxSize(),
-            uiState = PhotosUiState.Loading
+            uiState = GalleryUiState.Loading
         )
     }
 }
 
 /**
- * Preview of the gallery screen with mock data
+ * Preview of the gallery grid with mock photos in success state
  */
 @Preview(showBackground = true, device = "id:pixel_5")
 @Composable
-fun GalleryScreenSuccessPreview() {
+fun GalleryGridSuccessPreview() {
     RewindPhotosTheme {
         GalleryScreenContent(
             modifier = Modifier.fillMaxSize(),
-            uiState = PhotosUiState.Success(photos = mockPhotos)
+            uiState = GalleryUiState.Success(photos = GalleryGridPreviewMockPhotos)
         )
     }
 }
 
 /**
- * Preview of the gallery screen in empty state
+ * Preview of the gallery grid in empty state
  */
 @Preview(showBackground = true, device = "id:pixel_5")
 @Composable
-fun GalleryScreenEmptyPreview() {
+fun GalleryGridEmptyPreview() {
     RewindPhotosTheme {
         GalleryScreenContent(
             modifier = Modifier.fillMaxSize(),
-            uiState = PhotosUiState.Empty
+            uiState = GalleryUiState.Empty
         )
     }
 }
 
 /**
- * Preview of the gallery screen in error state
+ * Preview of the gallery grid in error state
  */
 @Preview(showBackground = true, device = "id:pixel_5")
 @Composable
-fun GalleryScreenErrorPreview() {
+fun GalleryGridErrorPreview() {
     RewindPhotosTheme {
         GalleryScreenContent(
             modifier = Modifier.fillMaxSize(),
-            uiState = PhotosUiState.Error(message = "Failed to load photos from device")
+            uiState = GalleryUiState.Error(message = "Failed to load photos from device storage")
         )
     }
 }
@@ -352,11 +385,12 @@ fun GalleryScreenErrorPreview() {
  */
 @Preview(showBackground = true)
 @Composable
-fun PhotoCardPreview() {
+fun GalleryPhotoCardPreview() {
     RewindPhotosTheme {
         PhotoCard(
             modifier = Modifier.size(120.dp),
-            photo = mockPhotos[0]
+            photo = GalleryGridPreviewMockPhotos[0]
         )
     }
 }
+

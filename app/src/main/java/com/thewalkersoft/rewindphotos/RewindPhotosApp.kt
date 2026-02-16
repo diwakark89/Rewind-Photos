@@ -1,0 +1,174 @@
+package com.thewalkersoft.rewindphotos
+
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CleaningServices
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Timeline
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import com.thewalkersoft.rewindphotos.ui.cleanup.CleanupScreen
+import com.thewalkersoft.rewindphotos.ui.gallery.GALLERY_ROUTE
+import com.thewalkersoft.rewindphotos.ui.gallery.GalleryScreen
+import com.thewalkersoft.rewindphotos.ui.gallery.PHOTO_DETAIL_ROUTE
+import com.thewalkersoft.rewindphotos.ui.gallery.PHOTO_URI_ARG
+import com.thewalkersoft.rewindphotos.ui.gallery.PHOTO_DATE_ARG
+import com.thewalkersoft.rewindphotos.ui.gallery.photoDetailScreen
+import com.thewalkersoft.rewindphotos.ui.selection.SelectionScreen
+import com.thewalkersoft.rewindphotos.ui.settings.SettingsScreen
+import com.thewalkersoft.rewindphotos.ui.timeline.TimelineScreen
+
+private const val CLEANUP_ROUTE = "cleanup"
+private const val TIMELINE_ROUTE = "timeline"
+private const val SETTINGS_ROUTE = "settings"
+private const val SELECTION_ROUTE = "selection"
+
+/**
+ * Main app navigation setup with bottom navigation.
+ * Sets up the NavHost and navigation graph for the application.
+ *
+ * This composable manages:
+ * - Bottom navigation with Gallery and Cleanup tabs
+ * - Navigation state with NavHostController
+ * - Navigation graph setup
+ * - Screen routing
+ *
+ * @param navController NavHostController for navigation management
+ * @param hasPermission Boolean indicating if storage permission is granted
+ */
+@Composable
+fun RewindPhotosApp(
+    navController: NavHostController = rememberNavController(),
+    hasPermission: Boolean = false
+) {
+    var selectedTab by remember { mutableStateOf(0) }
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        bottomBar = {
+            if (hasPermission) {
+                NavigationBar {
+                    NavigationBarItem(
+                        icon = { Icon(Icons.Filled.Timeline, contentDescription = "Timeline") },
+                        label = { Text("Timeline") },
+                        selected = selectedTab == 0,
+                        onClick = {
+                            selectedTab = 0
+                            navController.navigate(TIMELINE_ROUTE) {
+                                popUpTo(TIMELINE_ROUTE) { inclusive = true }
+                            }
+                        }
+                    )
+                    NavigationBarItem(
+                        icon = { Icon(Icons.Filled.PhotoLibrary, contentDescription = "Gallery") },
+                        label = { Text("Gallery") },
+                        selected = selectedTab == 1,
+                        onClick = {
+                            selectedTab = 1
+                            navController.navigate(GALLERY_ROUTE) {
+                                popUpTo(TIMELINE_ROUTE)
+                            }
+                        }
+                    )
+                    NavigationBarItem(
+                        icon = { Icon(Icons.Filled.CleaningServices, contentDescription = "Cleanup") },
+                        label = { Text("Cleanup") },
+                        selected = selectedTab == 2,
+                        onClick = {
+                            selectedTab = 2
+                            navController.navigate(CLEANUP_ROUTE) {
+                                popUpTo(TIMELINE_ROUTE)
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    ) { paddingValues ->
+        NavHost(
+            navController = navController,
+            startDestination = TIMELINE_ROUTE,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            // Timeline Screen - New main screen with year filtering
+            composable(TIMELINE_ROUTE) {
+                TimelineScreen(
+                    onSettingsClick = {
+                        navController.navigate(SETTINGS_ROUTE)
+                    },
+                    onPhotoClick = { photoId ->
+                        // Navigate to photo detail if needed
+                        // navController.navigate("$PHOTO_DETAIL_ROUTE?photoId=$photoId")
+                    },
+                    onPhotosLongPress = {
+                        // Enter selection mode
+                        navController.navigate(SELECTION_ROUTE)
+                    }
+                )
+            }
+
+            // Settings Screen - App settings
+            composable(SETTINGS_ROUTE) {
+                SettingsScreen(
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+
+            // Selection Screen - Multi-select mode for photos
+            composable(SELECTION_ROUTE) {
+                SelectionScreen(
+                    onExitSelectionMode = {
+                        navController.popBackStack()
+                    },
+                    onShareSelected = { photoIds ->
+                        // Handle share functionality
+                        // TODO: Implement share intent with selected photos
+                        navController.popBackStack()
+                    },
+                    onDeleteSelected = { photoIds ->
+                        // Handle delete functionality
+                        // TODO: Show confirmation dialog, then delete photos
+                        navController.popBackStack()
+                    }
+                )
+            }
+
+            // Gallery Screen - Grid view of all photos
+            composable(GALLERY_ROUTE) {
+                GalleryScreen(
+                    hasPermission = hasPermission,
+                    onPhotoClick = { photo ->
+                        navController.navigate("$PHOTO_DETAIL_ROUTE?$PHOTO_URI_ARG=${photo.uri}&$PHOTO_DATE_ARG=${photo.dateTaken}")
+                    }
+                )
+            }
+
+            // Cleanup Screen - Duplicate photo management
+            composable(CLEANUP_ROUTE) {
+                CleanupScreen()
+            }
+
+            // Photo Detail Screen - Full screen photo viewer
+            photoDetailScreen(navController = navController)
+        }
+    }
+}
+

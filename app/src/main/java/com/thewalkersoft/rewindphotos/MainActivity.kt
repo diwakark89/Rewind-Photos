@@ -10,6 +10,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -25,11 +26,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.navigation.NavHostController
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.rememberNavController
-import com.thewalkersoft.rewindphotos.ui.gallery.GALLERY_ROUTE
-import com.thewalkersoft.rewindphotos.ui.gallery.galleryScreen
 import com.thewalkersoft.rewindphotos.ui.theme.RewindPhotosTheme
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -41,8 +37,8 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             RewindPhotosTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { _ ->
-                    PermissionAwareApp()
+                Scaffold(modifier = Modifier.fillMaxSize()) { paddingValues ->
+                    PermissionAwareApp(modifier = Modifier.padding(paddingValues))
                 }
             }
         }
@@ -54,7 +50,7 @@ class MainActivity : ComponentActivity() {
  */
 @Composable
 @Suppress("DEPRECATION")
-private fun PermissionAwareApp() {
+private fun PermissionAwareApp(modifier: Modifier = Modifier) {
     val permissionState = remember { mutableStateOf(false) }
     val activity = LocalContext.current as? ComponentActivity
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -118,23 +114,6 @@ private fun PermissionAwareApp() {
     RewindPhotosApp(hasPermission = permissionState.value)
 }
 
-/**
- * Main app navigation setup.
- * Sets up the NavHost and navigation graph for the application.
- */
-@Composable
-fun RewindPhotosApp(
-    navController: NavHostController = rememberNavController(),
-    hasPermission: Boolean = false
-) {
-    NavHost(
-        navController = navController,
-        startDestination = GALLERY_ROUTE,
-        modifier = Modifier.fillMaxSize()
-    ) {
-        galleryScreen(navController = navController, hasPermission = hasPermission)
-    }
-}
 
 @Preview(showBackground = true)
 @Composable
