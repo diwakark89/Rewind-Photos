@@ -3,7 +3,6 @@ package com.thewalkersoft.rewindphotos
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material3.Icon
@@ -26,7 +25,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.compose.currentBackStackEntryAsState
-import com.thewalkersoft.rewindphotos.ui.cleanup.CleanupScreen
 import com.thewalkersoft.rewindphotos.ui.gallery.GALLERY_ROUTE
 import com.thewalkersoft.rewindphotos.ui.gallery.GalleryScreen
 import com.thewalkersoft.rewindphotos.ui.gallery.PHOTO_DETAIL_ROUTE
@@ -37,7 +35,6 @@ import com.thewalkersoft.rewindphotos.ui.selection.SelectionScreen
 import com.thewalkersoft.rewindphotos.ui.settings.SettingsScreen
 import com.thewalkersoft.rewindphotos.ui.timeline.TimelineScreen
 
-private const val CLEANUP_ROUTE = "cleanup"
 private const val TIMELINE_ROUTE = "timeline"
 private const val SETTINGS_ROUTE = "settings"
 private const val SELECTION_ROUTE = "selection"
@@ -69,7 +66,6 @@ fun RewindPhotosApp(
         selectedTab = when (currentRoute) {
             TIMELINE_ROUTE -> 0
             GALLERY_ROUTE -> 1
-            CLEANUP_ROUTE -> 2
             else -> selectedTabState.value
         }
     }
@@ -97,17 +93,6 @@ fun RewindPhotosApp(
                         onClick = {
                             selectedTab = 1
                             navController.navigate(GALLERY_ROUTE) {
-                                popUpTo(TIMELINE_ROUTE)
-                            }
-                        }
-                    )
-                    NavigationBarItem(
-                        icon = { Icon(Icons.Filled.CleaningServices, contentDescription = null) },
-                        label = { Text(stringResource(R.string.cleanup_nav_label)) },
-                        selected = selectedTab == 2,
-                        onClick = {
-                            selectedTab = 2
-                            navController.navigate(CLEANUP_ROUTE) {
                                 popUpTo(TIMELINE_ROUTE)
                             }
                         }
@@ -172,11 +157,6 @@ fun RewindPhotosApp(
                         navController.navigate("$PHOTO_DETAIL_ROUTE?$PHOTO_URI_ARG=${photo.uri}&$PHOTO_DATE_ARG=${photo.dateTaken}")
                     }
                 )
-            }
-
-            // Cleanup Screen - Duplicate photo management
-            composable(CLEANUP_ROUTE) {
-                CleanupScreen()
             }
 
             // Photo Detail Screen - Full screen photo viewer

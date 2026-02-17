@@ -2,5 +2,4 @@
     <string name="app_name">RewindPhotos</string>
     <string name="timeline_nav_label">Timeline</string>
     <string name="gallery_nav_label">Gallery</string>
-    <string name="cleanup_nav_label">Cleanup</string>
 </resources>
