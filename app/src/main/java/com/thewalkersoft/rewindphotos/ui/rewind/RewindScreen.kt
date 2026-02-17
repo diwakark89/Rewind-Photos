@@ -16,8 +16,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -37,6 +39,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -66,23 +69,21 @@ import com.thewalkersoft.rewindphotos.ui.theme.TextDark
 import com.thewalkersoft.rewindphotos.ui.theme.TextMedium
 import com.thewalkersoft.rewindphotos.ui.theme.White
 import com.thewalkersoft.rewindphotos.ui.theme.LightGray
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneId
 import java.util.Calendar
 import java.util.Locale
 
 /**
- * Rewind Screen composable displaying memories organized by date and year
+ * Rewind Screen composable displaying all memories organized by month sections
  *
  * Features:
- * - Top navigation bar with settings and layers icons
- * - Date selector with dropdown and navigation arrows
- * - Calendar and layers quick actions
+ * - Top navigation bar with settings icon and date picker
+ * - Date selector with Previous/Next navigation buttons
  * - Year filter chips (dynamically calculated from gallery photos)
- * - Scrollable rewind view showing memories grouped by year
- * - Memory count for each date
- * - Grid layout for memory photos
+ * - Scrollable rewind view showing memories grouped by month
+ * - Each month section displays location info and memory count
+ * - Grid layout for memory photos (2-column)
+ * - Auto-scroll to current date on app load
+ * - Auto-scroll to selected date when date changes
  *
  * @param modifier Modifier for styling
  * @param onSettingsClick Callback when settings icon is clicked
@@ -99,11 +100,14 @@ fun RewindScreen(
     onPhotosLongPress: () -> Unit = {},
     viewModel: RewindViewModel = hiltViewModel()
 ) {
-    var selectedYear by remember { mutableStateOf<Int?>(null) }
     var selectedMonth by remember { mutableIntStateOf(-1) }
     var selectedDay by remember { mutableIntStateOf(-1) }
+    var selectedYear by remember { mutableIntStateOf(-1) }
     val showDatePicker = remember { mutableStateOf(false) }
+
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val scrollToIndex by viewModel.scrollToIndex.collectAsStateWithLifecycle()
+    val lazyListState = rememberLazyListState()
 
     when (val state = uiState) {
         is RewindUiState.Loading -> {
@@ -149,20 +153,29 @@ fun RewindScreen(
         }
 
         is RewindUiState.Success -> {
-            if (selectedYear == null) {
-                selectedYear = state.availableYears.firstOrNull()
-            }
-            if (selectedMonth == -1 && selectedDay == -1) {
+            // Initialize defaults only once
+            if (selectedYear == -1) {
+                selectedYear = state.currentYear
                 selectedMonth = state.currentMonth
                 selectedDay = state.currentDay
             }
 
+            // Auto-scroll to target section with safety check
+            LaunchedEffect(scrollToIndex) {
+                if (scrollToIndex >= 0 && scrollToIndex < state.groupedPhotosData.sections.size) {
+                    try {
+                        lazyListState.animateScrollToItem(scrollToIndex)
+                    } catch (e: Exception) {
+                        android.util.Log.e("RewindScreen", "Error scrolling to index: $scrollToIndex", e)
+                    }
+                }
+            }
+
+            // Show date picker if requested
             if (showDatePicker.value) {
                 val initialDateMillis = remember(selectedYear, selectedMonth, selectedDay) {
                     val calendar = Calendar.getInstance(Locale.getDefault()).apply {
-                        val safeMonth = if (selectedMonth >= 0) selectedMonth else get(Calendar.MONTH)
-                        val safeDay = if (selectedDay >= 1) selectedDay else get(Calendar.DAY_OF_MONTH)
-                        set(selectedYear ?: get(Calendar.YEAR), safeMonth, safeDay)
+                        set(selectedYear, selectedMonth, selectedDay)
                     }
                     calendar.timeInMillis
                 }
@@ -184,6 +197,8 @@ fun RewindScreen(
                                         selectedYear = calendar.get(Calendar.YEAR)
                                         selectedMonth = calendar.get(Calendar.MONTH)
                                         selectedDay = calendar.get(Calendar.DAY_OF_MONTH)
+                                        // Trigger scroll to new date
+                                        viewModel.onDateSelected(selectedYear, selectedMonth, selectedDay)
                                     }
                                     showDatePicker.value = false
                                 }
@@ -214,19 +229,25 @@ fun RewindScreen(
                     onSettingsClick = onSettingsClick,
                     onPreviousClick = {
                         val calendar = Calendar.getInstance()
+                        calendar.set(Calendar.YEAR, selectedYear)
                         calendar.set(Calendar.MONTH, selectedMonth)
                         calendar.set(Calendar.DAY_OF_MONTH, selectedDay)
                         calendar.add(Calendar.DAY_OF_MONTH, -1)
+                        selectedYear = calendar.get(Calendar.YEAR)
                         selectedMonth = calendar.get(Calendar.MONTH)
                         selectedDay = calendar.get(Calendar.DAY_OF_MONTH)
+                        viewModel.onDateSelected(selectedYear, selectedMonth, selectedDay)
                     },
                     onNextClick = {
                         val calendar = Calendar.getInstance()
+                        calendar.set(Calendar.YEAR, selectedYear)
                         calendar.set(Calendar.MONTH, selectedMonth)
                         calendar.set(Calendar.DAY_OF_MONTH, selectedDay)
                         calendar.add(Calendar.DAY_OF_MONTH, 1)
+                        selectedYear = calendar.get(Calendar.YEAR)
                         selectedMonth = calendar.get(Calendar.MONTH)
                         selectedDay = calendar.get(Calendar.DAY_OF_MONTH)
+                        viewModel.onDateSelected(selectedYear, selectedMonth, selectedDay)
                     },
                     onCalendarClick = { showDatePicker.value = true }
                 )
@@ -234,16 +255,17 @@ fun RewindScreen(
                 // Year Filter Chips
                 RewindYearFilterRow(
                     years = state.availableYears,
-                    selectedYear = selectedYear ?: state.availableYears.first(),
-                    onYearSelected = { year -> selectedYear = year }
+                    selectedYear = selectedYear,
+                    onYearSelected = { year ->
+                        selectedYear = year
+                        viewModel.onYearSelected(year)
+                    }
                 )
 
-                // Rewind Content
+                // Month-grouped Content
                 RewindContent(
-                    selectedYear = selectedYear ?: state.availableYears.first(),
-                    selectedMonth = selectedMonth,
-                    selectedDay = selectedDay,
-                    allPhotos = state.allPhotos,
+                    groupedPhotosData = state.groupedPhotosData,
+                    lazyListState = lazyListState,
                     onPhotoClick = onPhotoClick,
                     onPhotosLongPress = onPhotosLongPress
                 )
@@ -305,6 +327,7 @@ private fun RewindDateNavigationBar(
             modifier = Modifier
                 .clip(RoundedCornerShape(24.dp))
                 .background(Color(0xFFF5F5F5))
+                .clickable { }
                 .padding(horizontal = 20.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -406,103 +429,96 @@ private fun RewindYearChip(
 }
 
 /**
- * Rewind content showing memories grouped by year
+ * Rewind content showing memories grouped by month with location info
  */
 @Composable
 private fun RewindContent(
-    selectedYear: Int,
-    selectedMonth: Int,
-    selectedDay: Int,
-    allPhotos: List<com.thewalkersoft.rewindphotos.domain.model.Photo>,
+    groupedPhotosData: com.thewalkersoft.rewindphotos.domain.model.GroupedPhotosData,
+    lazyListState: LazyListState,
     onPhotoClick: (String) -> Unit,
     onPhotosLongPress: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val zoneId = remember { ZoneId.systemDefault() }
-    val selectedDate = remember(selectedYear, selectedMonth, selectedDay, zoneId) {
-        LocalDate.of(selectedYear, selectedMonth + 1, selectedDay)
-    }
-    val photosForDate = remember(allPhotos, selectedDate, zoneId) {
-        allPhotos.filter { photo ->
-            if (photo.dateTaken <= 0L) return@filter false
-            val photoDate = Instant.ofEpochMilli(photo.dateTaken).atZone(zoneId).toLocalDate()
-            photoDate == selectedDate
-        }
-    }
-
-    val monthNames = listOf(
-        "January", "February", "March", "April", "May", "June",
-        "July", "August", "September", "October", "November", "December"
-    )
-    val dateString = "${monthNames[selectedMonth]} $selectedDay"
+    val sections = groupedPhotosData.sections
 
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .background(LightGray)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .background(LightGray),
+        state = lazyListState,
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp)
     ) {
-        item {
-            // Rewind and Memory Count Header
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = selectedYear.toString(),
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextDark
-                    )
-                    Text(
-                        text = dateString,
-                        fontSize = 14.sp,
-                        color = TextMedium,
-                        modifier = Modifier.padding(top = 2.dp)
-                    )
-                }
-                Text(
-                    text = "${photosForDate.size} memories",
-                    fontSize = 14.sp,
-                    color = TextMedium
-                )
-            }
-        }
-
-        // Photo Grid
-        if (photosForDate.isNotEmpty()) {
-            item {
-                RewindPhotoGrid(
-                    photos = photosForDate,
-                    onPhotoClick = onPhotoClick,
-                    onPhotosLongPress = onPhotosLongPress
-                )
-            }
-        } else {
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "No photos found for this date",
-                        color = TextMedium,
-                        fontSize = 14.sp,
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
+        items(
+            count = sections.size,
+            key = { index -> "${sections[index].year}_${sections[index].month}" }
+        ) { sectionIndex ->
+            val section = sections[sectionIndex]
+            RewindMonthSection(
+                monthSection = section,
+                onPhotoClick = onPhotoClick,
+                onPhotosLongPress = onPhotosLongPress
+            )
         }
     }
 }
 
 /**
- * Rewind photo grid
+ * Month section composable showing month header with location and photo grid
+ */
+@Composable
+private fun RewindMonthSection(
+    monthSection: com.thewalkersoft.rewindphotos.domain.model.MonthSection,
+    onPhotoClick: (String) -> Unit,
+    onPhotosLongPress: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val monthNames = listOf(
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    )
+    val monthName = monthNames[monthSection.month]
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        // Month Header with Location and Memory Count
+        Column(modifier = Modifier.padding(bottom = 12.dp)) {
+            Text(
+                text = "$monthName ${monthSection.year}",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = TextDark
+            )
+
+            // Location subtitle (if available)
+            if (!monthSection.location.isNullOrEmpty()) {
+                Text(
+                    text = monthSection.location,
+                    fontSize = 12.sp,
+                    color = TextMedium,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+
+            // Memory count
+            Text(
+                text = "${monthSection.photoCount} memories",
+                fontSize = 12.sp,
+                color = TextMedium,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+
+        // Photo Grid
+        RewindPhotoGrid(
+            photos = monthSection.photos,
+            onPhotoClick = onPhotoClick,
+            onPhotosLongPress = onPhotosLongPress
+        )
+    }
+}
+
+/**
+ * Rewind photo grid - 2 column layout
  */
 @Composable
 private fun RewindPhotoGrid(
@@ -537,7 +553,7 @@ private fun RewindPhotoGrid(
 }
 
 /**
- * Rewind photo item
+ * Rewind photo item card
  */
 @Composable
 private fun RewindPhotoItem(
@@ -587,3 +603,4 @@ private fun RewindScreenPreview() {
         }
     }
 }
+

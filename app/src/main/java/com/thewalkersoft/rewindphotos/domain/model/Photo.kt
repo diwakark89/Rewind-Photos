@@ -7,11 +7,13 @@ package com.thewalkersoft.rewindphotos.domain.model
  * @property uri URI string of the photo location
  * @property dateTaken Timestamp (in milliseconds) when the photo was taken
  * @property displayPath Human-readable path for displaying to the user
+ * @property location Optional location information extracted from EXIF data or geocoding
  */
 data class Photo(
     val id: Long,
     val uri: String,
     val dateTaken: Long,
-    val displayPath: String
+    val displayPath: String,
+    val location: String? = null
 )
 

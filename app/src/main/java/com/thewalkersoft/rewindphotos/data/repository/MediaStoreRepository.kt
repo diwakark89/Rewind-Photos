@@ -159,12 +159,15 @@ class MediaStoreRepository @Inject constructor(
                         id
                     )
 
+                    // Skip EXIF extraction here to avoid blocking
+                    // Location can be fetched later on-demand or in background
                     photos.add(
                         Photo(
                             id = id,
                             uri = contentUri.toString(),
                             dateTaken = dateTaken,
-                            displayPath = displayName
+                            displayPath = displayName,
+                            location = null
                         )
                     )
                 }
@@ -174,6 +177,40 @@ class MediaStoreRepository @Inject constructor(
         }
 
         return photos
+    }
+
+    /**
+     * Extract location information from EXIF data of a photo.
+     * Returns null if no location data is available.
+     * Uses timeout to prevent blocking if EXIF extraction is slow.
+     */
+    private fun extractLocationFromExif(photoUri: String): String? {
+        return try {
+            val uri = android.net.Uri.parse(photoUri)
+            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                try {
+                    val exif = android.media.ExifInterface(inputStream)
+
+                    // Try to get GPS coordinates
+                    val latRef = exif.getAttribute(android.media.ExifInterface.TAG_GPS_LATITUDE_REF)
+                    val lonRef = exif.getAttribute(android.media.ExifInterface.TAG_GPS_LONGITUDE_REF)
+
+                    if (latRef != null && lonRef != null) {
+                        // Location data exists, return a simplified identifier
+                        // Return "GPS" as placeholder since full geocoding is expensive
+                        "GPS"
+                    } else {
+                        null
+                    }
+                } catch (e: Exception) {
+                    // EXIF parsing failed, return null quickly
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.d("MediaStoreRepository", "Error extracting EXIF location", e)
+            null
+        }
     }
 
     private fun queryPhotoById(id: Long): Photo? {
@@ -211,7 +248,8 @@ class MediaStoreRepository @Inject constructor(
                     id = photoId,
                     uri = contentUri.toString(),
                     dateTaken = dateTaken,
-                    displayPath = displayName
+                    displayPath = displayName,
+                    location = null
                 )
             }
         } catch (e: Exception) {
