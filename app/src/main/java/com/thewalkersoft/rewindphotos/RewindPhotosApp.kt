@@ -6,7 +6,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Timeline
-import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -37,9 +36,7 @@ import com.thewalkersoft.rewindphotos.ui.gallery.photoDetailScreen
 import com.thewalkersoft.rewindphotos.ui.selection.SelectionScreen
 import com.thewalkersoft.rewindphotos.ui.settings.SettingsScreen
 import com.thewalkersoft.rewindphotos.ui.timeline.TimelineScreen
-import com.thewalkersoft.rewindphotos.ui.rewind.RewindScreen
 
-private const val REWIND_ROUTE = "rewind"
 private const val CLEANUP_ROUTE = "cleanup"
 private const val TIMELINE_ROUTE = "timeline"
 private const val SETTINGS_ROUTE = "settings"
@@ -70,10 +67,9 @@ fun RewindPhotosApp(
 
     LaunchedEffect(currentRoute) {
         selectedTab = when (currentRoute) {
-            REWIND_ROUTE -> 0
-            TIMELINE_ROUTE -> 1
-            GALLERY_ROUTE -> 2
-            CLEANUP_ROUTE -> 3
+            TIMELINE_ROUTE -> 0
+            GALLERY_ROUTE -> 1
+            CLEANUP_ROUTE -> 2
             else -> selectedTabState.value
         }
     }
@@ -84,46 +80,35 @@ fun RewindPhotosApp(
             if (hasPermission) {
                 NavigationBar {
                     NavigationBarItem(
-                        icon = { Icon(Icons.Filled.History, contentDescription = null) },
-                        label = { Text(stringResource(R.string.rewind_nav_label)) },
+                        icon = { Icon(Icons.Filled.Timeline, contentDescription = null) },
+                        label = { Text(stringResource(R.string.timeline_nav_label)) },
                         selected = selectedTab == 0,
                         onClick = {
                             selectedTab = 0
-                            navController.navigate(REWIND_ROUTE) {
-                                popUpTo(REWIND_ROUTE) { inclusive = true }
-                            }
-                        }
-                    )
-                    NavigationBarItem(
-                        icon = { Icon(Icons.Filled.Timeline, contentDescription = null) },
-                        label = { Text(stringResource(R.string.timeline_nav_label)) },
-                        selected = selectedTab == 1,
-                        onClick = {
-                            selectedTab = 1
                             navController.navigate(TIMELINE_ROUTE) {
-                                popUpTo(REWIND_ROUTE)
+                                popUpTo(TIMELINE_ROUTE) { inclusive = true }
                             }
                         }
                     )
                     NavigationBarItem(
                         icon = { Icon(Icons.Filled.PhotoLibrary, contentDescription = null) },
                         label = { Text(stringResource(R.string.gallery_nav_label)) },
-                        selected = selectedTab == 2,
+                        selected = selectedTab == 1,
                         onClick = {
-                            selectedTab = 2
+                            selectedTab = 1
                             navController.navigate(GALLERY_ROUTE) {
-                                popUpTo(REWIND_ROUTE)
+                                popUpTo(TIMELINE_ROUTE)
                             }
                         }
                     )
                     NavigationBarItem(
                         icon = { Icon(Icons.Filled.CleaningServices, contentDescription = null) },
                         label = { Text(stringResource(R.string.cleanup_nav_label)) },
-                        selected = selectedTab == 3,
+                        selected = selectedTab == 2,
                         onClick = {
-                            selectedTab = 3
+                            selectedTab = 2
                             navController.navigate(CLEANUP_ROUTE) {
-                                popUpTo(REWIND_ROUTE)
+                                popUpTo(TIMELINE_ROUTE)
                             }
                         }
                     )
@@ -133,22 +118,18 @@ fun RewindPhotosApp(
     ) { paddingValues ->
         NavHost(
             navController = navController,
-            startDestination = REWIND_ROUTE,
+            startDestination = TIMELINE_ROUTE,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            composable(REWIND_ROUTE) {
-                RewindScreen()
-            }
-
             // Timeline Screen - New main screen with year filtering
             composable(TIMELINE_ROUTE) {
                 TimelineScreen(
                     onSettingsClick = {
                         navController.navigate(SETTINGS_ROUTE)
                     },
-                    onPhotoClick = { photoId ->
+                    onPhotoClick = { _ ->
                         // Navigate to photo detail if needed
                         // navController.navigate("$PHOTO_DETAIL_ROUTE?photoId=$photoId")
                     },
@@ -161,11 +142,7 @@ fun RewindPhotosApp(
 
             // Settings Screen - App settings
             composable(SETTINGS_ROUTE) {
-                SettingsScreen(
-                    onNavigateBack = {
-                        navController.popBackStack()
-                    }
-                )
+                SettingsScreen()
             }
 
             // Selection Screen - Multi-select mode for photos
@@ -174,12 +151,12 @@ fun RewindPhotosApp(
                     onExitSelectionMode = {
                         navController.popBackStack()
                     },
-                    onShareSelected = { photoIds ->
+                    onShareSelected = { _ ->
                         // Handle share functionality
                         // TODO: Implement share intent with selected photos
                         navController.popBackStack()
                     },
-                    onDeleteSelected = { photoIds ->
+                    onDeleteSelected = { _ ->
                         // Handle delete functionality
                         // TODO: Show confirmation dialog, then delete photos
                         navController.popBackStack()

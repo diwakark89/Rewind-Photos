@@ -44,7 +44,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             RewindPhotosTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { paddingValues ->
-                    PermissionAwareApp(modifier = Modifier.padding(paddingValues))
+                    PermissionAwareApp()
                 }
             }
         }
@@ -56,7 +56,7 @@ class MainActivity : ComponentActivity() {
  */
 @Composable
 @Suppress("DEPRECATION")
-private fun PermissionAwareApp(modifier: Modifier = Modifier) {
+private fun PermissionAwareApp() {
     val permissionState = remember { mutableStateOf(false) }
     val activity = LocalContext.current as? ComponentActivity
     val lifecycleOwner = LocalLifecycleOwner.current

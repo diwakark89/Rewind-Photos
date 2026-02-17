@@ -426,7 +426,6 @@ private fun PhotoGridDetail(
             ) {
                 row.forEach { memory ->
                     PhotoCardDetail(
-                        memory = memory,
                         isSelected = selectedPhotos.contains(memory.id),
                         onSelect = { onPhotoSelect(memory.id) },
                         modifier = Modifier.weight(1f)
@@ -444,14 +443,12 @@ private fun PhotoGridDetail(
 /**
  * Individual photo card with selection checkbox overlay
  *
- * @param memory Memory item to display
  * @param isSelected Whether this photo is selected
  * @param onSelect Callback when clicked
  * @param modifier Modifier for styling
  */
 @Composable
 private fun PhotoCardDetail(
-    memory: MemoryItemDetail,
     isSelected: Boolean,
     onSelect: () -> Unit,
     modifier: Modifier = Modifier

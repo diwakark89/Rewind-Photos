@@ -19,11 +19,15 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -31,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -46,6 +51,8 @@ import com.thewalkersoft.rewindphotos.ui.theme.TextDark
 import com.thewalkersoft.rewindphotos.ui.theme.TextMedium
 import com.thewalkersoft.rewindphotos.ui.theme.White
 import java.util.Calendar
+import java.util.Locale
+import androidx.compose.material3.ExperimentalMaterial3Api
 
 /**
  * Main Gallery Screen composable
@@ -62,6 +69,7 @@ import java.util.Calendar
  * @param onPhotoClick Callback when a photo is clicked
  * @param viewModel ViewModel for managing state
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     modifier: Modifier = Modifier,
@@ -73,6 +81,7 @@ fun MainScreen(
     val selectedYear = remember { mutableStateOf<Int?>(null) }
     val selectedMonth = remember { mutableStateOf(0) }
     val selectedDay = remember { mutableStateOf(1) }
+    val showDatePicker = remember { mutableStateOf(false) }
 
     when (val state = uiState) {
         is MainUiState.Loading -> {
@@ -127,6 +136,57 @@ fun MainScreen(
                 selectedDay.value = state.currentDay
             }
 
+            if (showDatePicker.value) {
+                val initialDateMillis = remember(
+                    selectedYear.value,
+                    selectedMonth.value,
+                    selectedDay.value
+                ) {
+                    val calendar = Calendar.getInstance(Locale.getDefault()).apply {
+                        set(
+                            selectedYear.value ?: get(Calendar.YEAR),
+                            selectedMonth.value,
+                            selectedDay.value
+                        )
+                    }
+                    calendar.timeInMillis
+                }
+
+                key(initialDateMillis) {
+                    val datePickerState = androidx.compose.material3.rememberDatePickerState(
+                        initialSelectedDateMillis = initialDateMillis
+                    )
+                    DatePickerDialog(
+                        onDismissRequest = { showDatePicker.value = false },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    val selectedMillis = datePickerState.selectedDateMillis
+                                    if (selectedMillis != null) {
+                                        val calendar = Calendar.getInstance().apply {
+                                            timeInMillis = selectedMillis
+                                        }
+                                        selectedYear.value = calendar.get(Calendar.YEAR)
+                                        selectedMonth.value = calendar.get(Calendar.MONTH)
+                                        selectedDay.value = calendar.get(Calendar.DAY_OF_MONTH)
+                                    }
+                                    showDatePicker.value = false
+                                }
+                            ) {
+                                Text(text = stringResource(id = android.R.string.ok))
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showDatePicker.value = false }) {
+                                Text(text = stringResource(id = android.R.string.cancel))
+                            }
+                        }
+                    ) {
+                        DatePicker(state = datePickerState)
+                    }
+                }
+            }
+
             Column(
                 modifier = modifier
                     .fillMaxSize()
@@ -156,7 +216,8 @@ fun MainScreen(
                         calendar.add(Calendar.DAY_OF_MONTH, 1)
                         selectedMonth.value = calendar.get(Calendar.MONTH)
                         selectedDay.value = calendar.get(Calendar.DAY_OF_MONTH)
-                    }
+                    },
+                    onCalendarClick = { showDatePicker.value = true }
                 )
 
                 // Year Filter Buttons
@@ -211,18 +272,18 @@ private fun TopActionBar(
             )
         }
 
-        // Grid View Toggle
-        IconButton(
-            onClick = { /* Handle grid view toggle */ },
-            modifier = Modifier.size(40.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Filled.GridView,
-                contentDescription = "Grid View",
-                modifier = Modifier.size(24.dp),
-                tint = TextDark
-            )
-        }
+//        // Grid View Toggle
+//        IconButton(
+//            onClick = { /* Handle grid view toggle */ },
+//            modifier = Modifier.size(40.dp)
+//        ) {
+//            Icon(
+//                imageVector = Icons.Filled.GridView,
+//                contentDescription = "Grid View",
+//                modifier = Modifier.size(24.dp),
+//                tint = TextDark
+//            )
+//        }
     }
 }
 
@@ -241,6 +302,7 @@ private fun DateNavigationBar(
     currentDay: Int,
     onPreviousDate: () -> Unit,
     onNextDate: () -> Unit,
+    onCalendarClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val monthNames = listOf(
@@ -301,7 +363,7 @@ private fun DateNavigationBar(
 
         // Calendar Icon (right side)
         IconButton(
-            onClick = { /* Open calendar */ },
+            onClick = onCalendarClick,
             modifier = Modifier.size(32.dp)
         ) {
             Icon(
@@ -555,4 +617,3 @@ private fun PhotoCard(
         )
     }
 }
-

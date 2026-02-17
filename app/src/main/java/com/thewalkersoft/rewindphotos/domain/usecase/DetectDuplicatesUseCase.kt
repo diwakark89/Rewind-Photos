@@ -4,6 +4,7 @@ import com.thewalkersoft.rewindphotos.domain.model.DuplicateGroup
 import com.thewalkersoft.rewindphotos.domain.model.Photo
 import com.thewalkersoft.rewindphotos.domain.repository.DuplicateDetector
 import com.thewalkersoft.rewindphotos.domain.repository.PhotoRepository
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flatMapLatest
 import javax.inject.Inject
@@ -18,6 +19,7 @@ import javax.inject.Inject
  *
  * This use case bridges domain logic and data access layers.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class DetectDuplicatesUseCase @Inject constructor(
     private val photoRepository: PhotoRepository,
     private val duplicateDetector: DuplicateDetector
@@ -46,4 +48,3 @@ class DetectDuplicatesUseCase @Inject constructor(
         }
     }
 }
-

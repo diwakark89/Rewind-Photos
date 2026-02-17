@@ -24,35 +24,50 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.thewalkersoft.rewindphotos.ui.theme.Orange
 import com.thewalkersoft.rewindphotos.ui.theme.TextDark
 import com.thewalkersoft.rewindphotos.ui.theme.TextMedium
 import com.thewalkersoft.rewindphotos.ui.theme.White
 import com.thewalkersoft.rewindphotos.ui.theme.LightGray
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.Calendar
+import java.util.Locale
 
 /**
  * Timeline Screen composable displaying memories organized by date and year
@@ -72,6 +87,7 @@ import java.util.Calendar
  * @param onPhotosLongPress Callback for entering selection mode
  * @param viewModel ViewModel for managing state
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TimelineScreen(
     modifier: Modifier = Modifier,
@@ -80,9 +96,10 @@ fun TimelineScreen(
     onPhotosLongPress: () -> Unit = {},
     viewModel: TimelineViewModel = hiltViewModel()
 ) {
-    val selectedYear = remember { mutableStateOf<Int?>(null) }
-    val selectedMonth = remember { mutableStateOf(0) }
-    val selectedDay = remember { mutableStateOf(1) }
+    var selectedYear by remember { mutableStateOf<Int?>(null) }
+    var selectedMonth by remember { mutableIntStateOf(-1) }
+    var selectedDay by remember { mutableIntStateOf(-1) }
+    val showDatePicker = remember { mutableStateOf(false) }
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     when (val state = uiState) {
@@ -129,13 +146,57 @@ fun TimelineScreen(
         }
 
         is TimelineUiState.Success -> {
-            // Initialize state
-            if (selectedYear.value == null) {
-                selectedYear.value = state.availableYears.firstOrNull()
+            if (selectedYear == null) {
+                selectedYear = state.availableYears.firstOrNull()
             }
-            if (selectedMonth.value == 0 && selectedDay.value == 1) {
-                selectedMonth.value = state.currentMonth
-                selectedDay.value = state.currentDay
+            if (selectedMonth == -1 && selectedDay == -1) {
+                selectedMonth = state.currentMonth
+                selectedDay = state.currentDay
+            }
+
+            if (showDatePicker.value) {
+                val initialDateMillis = remember(selectedYear, selectedMonth, selectedDay) {
+                    val calendar = Calendar.getInstance(Locale.getDefault()).apply {
+                        val safeMonth = if (selectedMonth >= 0) selectedMonth else get(Calendar.MONTH)
+                        val safeDay = if (selectedDay >= 1) selectedDay else get(Calendar.DAY_OF_MONTH)
+                        set(selectedYear ?: get(Calendar.YEAR), safeMonth, safeDay)
+                    }
+                    calendar.timeInMillis
+                }
+
+                key(initialDateMillis) {
+                    val datePickerState = androidx.compose.material3.rememberDatePickerState(
+                        initialSelectedDateMillis = initialDateMillis
+                    )
+                    DatePickerDialog(
+                        onDismissRequest = { showDatePicker.value = false },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    val selectedMillis = datePickerState.selectedDateMillis
+                                    if (selectedMillis != null) {
+                                        val calendar = Calendar.getInstance().apply {
+                                            timeInMillis = selectedMillis
+                                        }
+                                        selectedYear = calendar.get(Calendar.YEAR)
+                                        selectedMonth = calendar.get(Calendar.MONTH)
+                                        selectedDay = calendar.get(Calendar.DAY_OF_MONTH)
+                                    }
+                                    showDatePicker.value = false
+                                }
+                            ) {
+                                Text(text = stringResource(id = android.R.string.ok))
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showDatePicker.value = false }) {
+                                Text(text = stringResource(id = android.R.string.cancel))
+                            }
+                        }
+                    ) {
+                        DatePicker(state = datePickerState)
+                    }
+                }
             }
 
             Column(
@@ -145,41 +206,40 @@ fun TimelineScreen(
             ) {
                 // Date Navigation Bar
                 TimelineDateNavigationBar(
-                    currentMonth = selectedMonth.value,
-                    currentDay = selectedDay.value,
+                    currentMonth = selectedMonth,
+                    currentDay = selectedDay,
                     onSettingsClick = onSettingsClick,
                     onPreviousClick = {
                         val calendar = Calendar.getInstance()
-                        calendar.set(Calendar.MONTH, selectedMonth.value)
-                        calendar.set(Calendar.DAY_OF_MONTH, selectedDay.value)
+                        calendar.set(Calendar.MONTH, selectedMonth)
+                        calendar.set(Calendar.DAY_OF_MONTH, selectedDay)
                         calendar.add(Calendar.DAY_OF_MONTH, -1)
-                        selectedMonth.value = calendar.get(Calendar.MONTH)
-                        selectedDay.value = calendar.get(Calendar.DAY_OF_MONTH)
+                        selectedMonth = calendar.get(Calendar.MONTH)
+                        selectedDay = calendar.get(Calendar.DAY_OF_MONTH)
                     },
                     onNextClick = {
                         val calendar = Calendar.getInstance()
-                        calendar.set(Calendar.MONTH, selectedMonth.value)
-                        calendar.set(Calendar.DAY_OF_MONTH, selectedDay.value)
+                        calendar.set(Calendar.MONTH, selectedMonth)
+                        calendar.set(Calendar.DAY_OF_MONTH, selectedDay)
                         calendar.add(Calendar.DAY_OF_MONTH, 1)
-                        selectedMonth.value = calendar.get(Calendar.MONTH)
-                        selectedDay.value = calendar.get(Calendar.DAY_OF_MONTH)
+                        selectedMonth = calendar.get(Calendar.MONTH)
+                        selectedDay = calendar.get(Calendar.DAY_OF_MONTH)
                     },
-                    onCalendarClick = { /* Open calendar */ },
-                    onLayersClick = { /* Open layers/filters */ }
+                    onCalendarClick = { showDatePicker.value = true }
                 )
 
                 // Year Filter Chips
                 TimelineYearFilterRow(
                     years = state.availableYears,
-                    selectedYear = selectedYear.value ?: state.availableYears.first(),
-                    onYearSelected = { year -> selectedYear.value = year }
+                    selectedYear = selectedYear ?: state.availableYears.first(),
+                    onYearSelected = { year -> selectedYear = year }
                 )
 
                 // Timeline Content
                 TimelineContent(
-                    selectedYear = selectedYear.value ?: state.availableYears.first(),
-                    selectedMonth = selectedMonth.value,
-                    selectedDay = selectedDay.value,
+                    selectedYear = selectedYear ?: state.availableYears.first(),
+                    selectedMonth = selectedMonth,
+                    selectedDay = selectedDay,
                     allPhotos = state.allPhotos,
                     onPhotoClick = onPhotoClick,
                     onPhotosLongPress = onPhotosLongPress
@@ -200,8 +260,7 @@ private fun TimelineDateNavigationBar(
     onSettingsClick: () -> Unit,
     onPreviousClick: () -> Unit,
     onNextClick: () -> Unit,
-    onCalendarClick: () -> Unit,
-    onLayersClick: () -> Unit
+    onCalendarClick: () -> Unit
 ) {
     val monthNames = listOf(
         "January", "February", "March", "April", "May", "June",
@@ -209,7 +268,6 @@ private fun TimelineDateNavigationBar(
     )
     val currentDate = "${monthNames[currentMonth]} $currentDay"
 
-    // ...existing code...
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -286,20 +344,6 @@ private fun TimelineDateNavigationBar(
                 tint = White
             )
         }
-        IconButton(
-            onClick = onLayersClick,
-            modifier = Modifier
-                .size(40.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color(0xFFF5F5F5))
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Layers,
-                contentDescription = "Layers",
-                modifier = Modifier.size(20.dp),
-                tint = TextDark
-            )
-        }
     }
 }
 
@@ -341,7 +385,6 @@ private fun TimelineYearChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // ...existing code...
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(24.dp))
@@ -372,15 +415,16 @@ private fun TimelineContent(
     onPhotosLongPress: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Filter photos for the selected date
-    val photosForDate = allPhotos.filter { photo ->
-        val photoCalendar = Calendar.getInstance()
-        photoCalendar.timeInMillis = photo.dateTaken
-        val photoYear = photoCalendar.get(Calendar.YEAR)
-        val photoMonth = photoCalendar.get(Calendar.MONTH)
-        val photoDay = photoCalendar.get(Calendar.DAY_OF_MONTH)
-
-        photoYear == selectedYear && photoMonth == selectedMonth && photoDay == selectedDay
+    val zoneId = remember { ZoneId.systemDefault() }
+    val selectedDate = remember(selectedYear, selectedMonth, selectedDay, zoneId) {
+        LocalDate.of(selectedYear, selectedMonth + 1, selectedDay)
+    }
+    val photosForDate = remember(allPhotos, selectedDate, zoneId) {
+        allPhotos.filter { photo ->
+            if (photo.dateTaken <= 0L) return@filter false
+            val photoDate = Instant.ofEpochMilli(photo.dateTaken).atZone(zoneId).toLocalDate()
+            photoDate == selectedDate
+        }
     }
 
     val monthNames = listOf(
@@ -499,6 +543,8 @@ private fun TimelinePhotoItem(
     onPhotosLongPress: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -516,8 +562,15 @@ private fun TimelinePhotoItem(
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(text = "Photo", fontSize = 14.sp, color = TextMedium)
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(photo.uri)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = "Photo",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
         }
     }
 }
-

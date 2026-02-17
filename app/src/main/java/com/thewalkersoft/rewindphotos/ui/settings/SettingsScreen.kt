@@ -65,13 +65,11 @@ import com.thewalkersoft.rewindphotos.ui.theme.White
  * Features Material 3 design with proper spacing, icons, and interactions
  *
  * @param modifier Modifier for styling
- * @param onNavigateBack Callback when back navigation is requested
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    modifier: Modifier = Modifier,
-    onNavigateBack: () -> Unit = {}
+    modifier: Modifier = Modifier
 ) {
     val dailyReminderEnabled = remember { mutableStateOf(true) }
     val showScreenshotsEnabled = remember { mutableStateOf(false) }
@@ -384,4 +382,3 @@ private fun SettingsSwitchItem(
         )
     }
 }
-
