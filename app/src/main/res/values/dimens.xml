@@ -1,0 +1,11 @@
+<resources>
+    <dimen name="rewind_screen_padding">16dp</dimen>
+    <dimen name="rewind_section_spacing">24dp</dimen>
+    <dimen name="rewind_header_spacing">12dp</dimen>
+    <dimen name="rewind_grid_spacing">12dp</dimen>
+    <dimen name="rewind_photo_min_size">120dp</dimen>
+    <dimen name="rewind_detail_back_padding">12dp</dimen>
+    <dimen name="rewind_empty_title_spacing">12dp</dimen>
+    <dimen name="rewind_empty_subtitle_spacing">8dp</dimen>
+</resources>
+

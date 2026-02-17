@@ -1,3 +1,15 @@
 <resources>
     <string name="app_name">RewindPhotos</string>
+    <string name="rewind_empty_title">No memories found for today</string>
+    <string name="rewind_empty_subtitle">Check back tomorrow for new moments</string>
+    <string name="rewind_back">Back</string>
+    <string name="rewind_nav_label">Rewind</string>
+    <string name="timeline_nav_label">Timeline</string>
+    <string name="gallery_nav_label">Gallery</string>
+    <string name="cleanup_nav_label">Cleanup</string>
+
+    <plurals name="rewind_years_ago">
+        <item quantity="one">%d Year Ago</item>
+        <item quantity="other">%d Years Ago</item>
+    </plurals>
 </resources>

@@ -12,88 +12,170 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.thewalkersoft.rewindphotos.domain.model.Photo
+import com.thewalkersoft.rewindphotos.ui.theme.LightGray
 import com.thewalkersoft.rewindphotos.ui.theme.Orange
 import com.thewalkersoft.rewindphotos.ui.theme.TextDark
 import com.thewalkersoft.rewindphotos.ui.theme.TextMedium
-import com.thewalkersoft.rewindphotos.ui.theme.LightGray
 import com.thewalkersoft.rewindphotos.ui.theme.White
-import androidx.compose.material.icons.filled.Image
+import java.util.Calendar
 
 /**
  * Main Gallery Screen composable
  *
  * Displays photo memories organized by date with:
  * - Top navigation bar with settings and grid view toggle
- * - Date selector (February 10) with month/year navigation
- * - Year filter buttons (2025, 2024, 2019)
- * - Memory cards showing photos from a specific date
+ * - Date selector with month/year navigation
+ * - Year filter buttons (dynamically calculated from gallery photos)
+ * - Memory cards showing photos from a specific date across multiple years
  * - Count of memories for each date
  *
  * @param modifier Modifier for styling
  * @param onSettingsClick Callback when settings icon is clicked
  * @param onPhotoClick Callback when a photo is clicked
+ * @param viewModel ViewModel for managing state
  */
 @Composable
 fun MainScreen(
     modifier: Modifier = Modifier,
     onSettingsClick: () -> Unit = {},
-    onPhotoClick: (String) -> Unit = {}
+    onPhotoClick: (String) -> Unit = {},
+    viewModel: MainViewModel = hiltViewModel()
 ) {
-    val selectedYear = remember { mutableStateOf(2025) }
-    val selectedDate = remember { mutableStateOf("February 10") }
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val selectedYear = remember { mutableStateOf<Int?>(null) }
+    val selectedMonth = remember { mutableStateOf(0) }
+    val selectedDay = remember { mutableStateOf(1) }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(White)
-    ) {
-        // Top Action Bar
-        TopActionBar(
-            onSettingsClick = onSettingsClick
-        )
+    when (val state = uiState) {
+        is MainUiState.Loading -> {
+            Box(
+                modifier = modifier
+                    .fillMaxSize()
+                    .background(White),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
+        }
 
-        // Date Navigation and Filter
-        DateNavigationBar(
-            currentDate = selectedDate.value,
-            onPreviousDate = { selectedDate.value = "February 9" },
-            onNextDate = { selectedDate.value = "February 11" }
-        )
+        is MainUiState.Error -> {
+            Box(
+                modifier = modifier
+                    .fillMaxSize()
+                    .background(White),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Error: ${state.message}",
+                    color = TextDark,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
+        }
 
-        // Year Filter Buttons
-        YearFilterRow(
-            selectedYear = selectedYear.value,
-            onYearSelected = { year -> selectedYear.value = year }
-        )
+        is MainUiState.Empty -> {
+            Box(
+                modifier = modifier
+                    .fillMaxSize()
+                    .background(White),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "No photos available",
+                    color = TextMedium,
+                    fontSize = 16.sp
+                )
+            }
+        }
 
-        // Memory Cards List
-        MemoryCardsList(
-            selectedYear = selectedYear.value,
-            selectedDate = selectedDate.value,
-            onPhotoClick = onPhotoClick
-        )
+        is MainUiState.Success -> {
+            // Set initial selected year if not set
+            if (selectedYear.value == null) {
+                selectedYear.value = state.availableYears.firstOrNull()
+            }
+            if (selectedMonth.value == 0 && selectedDay.value == 1) {
+                selectedMonth.value = state.currentMonth
+                selectedDay.value = state.currentDay
+            }
+
+            Column(
+                modifier = modifier
+                    .fillMaxSize()
+                    .background(White)
+            ) {
+                // Top Action Bar
+                TopActionBar(
+                    onSettingsClick = onSettingsClick
+                )
+
+                // Date Navigation and Filter
+                DateNavigationBar(
+                    currentMonth = selectedMonth.value,
+                    currentDay = selectedDay.value,
+                    onPreviousDate = {
+                        val calendar = Calendar.getInstance()
+                        calendar.set(Calendar.MONTH, selectedMonth.value)
+                        calendar.set(Calendar.DAY_OF_MONTH, selectedDay.value)
+                        calendar.add(Calendar.DAY_OF_MONTH, -1)
+                        selectedMonth.value = calendar.get(Calendar.MONTH)
+                        selectedDay.value = calendar.get(Calendar.DAY_OF_MONTH)
+                    },
+                    onNextDate = {
+                        val calendar = Calendar.getInstance()
+                        calendar.set(Calendar.MONTH, selectedMonth.value)
+                        calendar.set(Calendar.DAY_OF_MONTH, selectedDay.value)
+                        calendar.add(Calendar.DAY_OF_MONTH, 1)
+                        selectedMonth.value = calendar.get(Calendar.MONTH)
+                        selectedDay.value = calendar.get(Calendar.DAY_OF_MONTH)
+                    }
+                )
+
+                // Year Filter Buttons
+                YearFilterRow(
+                    selectedYear = selectedYear.value,
+                    availableYears = state.availableYears,
+                    onYearSelected = { year -> selectedYear.value = year }
+                )
+
+                // Memory Cards List
+                MemoryCardsList(
+                    selectedYear = selectedYear.value ?: state.availableYears.first(),
+                    selectedMonth = selectedMonth.value,
+                    selectedDay = selectedDay.value,
+                    allPhotos = state.allPhotos,
+                    onPhotoClick = onPhotoClick
+                )
+            }
+        }
     }
 }
 
@@ -147,18 +229,26 @@ private fun TopActionBar(
 /**
  * Date navigation bar showing current date with previous/next navigation
  *
- * @param currentDate Current selected date string
+ * @param currentMonth Current selected month (0-11)
+ * @param currentDay Current selected day (1-31)
  * @param onPreviousDate Callback for previous date navigation
  * @param onNextDate Callback for next date navigation
  * @param modifier Modifier for styling
  */
 @Composable
 private fun DateNavigationBar(
-    currentDate: String,
+    currentMonth: Int,
+    currentDay: Int,
     onPreviousDate: () -> Unit,
     onNextDate: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val monthNames = listOf(
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    )
+    val currentDate = "${monthNames[currentMonth]} $currentDay"
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -228,17 +318,17 @@ private fun DateNavigationBar(
  * Year filter buttons allowing selection between different years
  *
  * @param selectedYear Currently selected year
+ * @param availableYears List of available years from gallery photos
  * @param onYearSelected Callback when a year is selected
  * @param modifier Modifier for styling
  */
 @Composable
 private fun YearFilterRow(
-    selectedYear: Int,
+    selectedYear: Int?,
+    availableYears: List<Int>,
     onYearSelected: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val years = listOf(2025, 2024, 2019)
-
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -246,7 +336,7 @@ private fun YearFilterRow(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        years.forEach { year ->
+        availableYears.forEach { year ->
             YearFilterButton(
                 year = year,
                 isSelected = selectedYear == year,
@@ -292,45 +382,37 @@ private fun YearFilterButton(
  * Memory cards list showing photos for the selected date
  *
  * @param selectedYear The currently selected year
- * @param selectedDate The currently selected date
+ * @param selectedMonth The currently selected month (0-11)
+ * @param selectedDay The currently selected day (1-31)
+ * @param allPhotos All photos from the gallery
  * @param onPhotoClick Callback when a photo is clicked
  * @param modifier Modifier for styling
  */
 @Composable
 private fun MemoryCardsList(
     selectedYear: Int,
-    selectedDate: String,
+    selectedMonth: Int,
+    selectedDay: Int,
+    allPhotos: List<Photo>,
     onPhotoClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Sample data for demonstration
-    val memoriesByDate = mapOf(
-        2025 to mapOf(
-            "February 10" to listOf(
-                MemoryItem("memory_1", "memory_1.jpg"),
-                MemoryItem("memory_2", "memory_2.jpg"),
-                MemoryItem("memory_3", "memory_3.jpg"),
-                MemoryItem("memory_4", "memory_4.jpg"),
-                MemoryItem("memory_5", "memory_5.jpg"),
-                MemoryItem("memory_6", "memory_6.jpg")
-            )
-        ),
-        2024 to mapOf(
-            "February 10" to listOf(
-                MemoryItem("memory_7", "memory_7.jpg"),
-                MemoryItem("memory_8", "memory_8.jpg"),
-                MemoryItem("memory_9", "memory_9.jpg")
-            )
-        ),
-        2019 to mapOf(
-            "February 10" to listOf(
-                MemoryItem("memory_10", "memory_10.jpg"),
-                MemoryItem("memory_11", "memory_11.jpg")
-            )
-        )
-    )
+    // Filter photos for the selected year and date (month/day only, ignore year)
+    val photosForDate = allPhotos.filter { photo ->
+        val photoCalendar = Calendar.getInstance()
+        photoCalendar.timeInMillis = photo.dateTaken
+        val photoYear = photoCalendar.get(Calendar.YEAR)
+        val photoMonth = photoCalendar.get(Calendar.MONTH)
+        val photoDay = photoCalendar.get(Calendar.DAY_OF_MONTH)
 
-    val memories = memoriesByDate[selectedYear]?.get(selectedDate) ?: emptyList()
+        photoYear == selectedYear && photoMonth == selectedMonth && photoDay == selectedDay
+    }
+
+    val monthNames = listOf(
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    )
+    val dateString = "${monthNames[selectedMonth]} $selectedDay"
 
     LazyColumn(
         modifier = modifier
@@ -354,14 +436,14 @@ private fun MemoryCardsList(
                         color = TextDark
                     )
                     Text(
-                        text = selectedDate,
+                        text = dateString,
                         fontSize = 14.sp,
                         color = TextMedium,
                         modifier = Modifier.padding(top = 2.dp)
                     )
                 }
                 Text(
-                    text = "${memories.size} memories",
+                    text = "${photosForDate.size} memories",
                     fontSize = 14.sp,
                     color = TextMedium
                 )
@@ -369,11 +451,29 @@ private fun MemoryCardsList(
         }
 
         // Photo Grid
-        item {
-            PhotoGrid(
-                memories = memories,
-                onPhotoClick = onPhotoClick
-            )
+        if (photosForDate.isNotEmpty()) {
+            item {
+                PhotoGrid(
+                    photos = photosForDate,
+                    onPhotoClick = onPhotoClick
+                )
+            }
+        } else {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "No photos found for this date",
+                        color = TextMedium,
+                        fontSize = 14.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
         }
     }
 }
@@ -381,13 +481,13 @@ private fun MemoryCardsList(
 /**
  * Grid layout for displaying memory photos (2 columns)
  *
- * @param memories List of memory items to display
+ * @param photos List of photo objects to display
  * @param onPhotoClick Callback when a photo is clicked
  * @param modifier Modifier for styling
  */
 @Composable
 private fun PhotoGrid(
-    memories: List<MemoryItem>,
+    photos: List<Photo>,
     onPhotoClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -395,14 +495,14 @@ private fun PhotoGrid(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        memories.chunked(2).forEach { row ->
+        photos.chunked(2).forEach { row ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                row.forEach { memory ->
+                row.forEach { photo ->
                     PhotoCard(
-                        memory = memory,
+                        photo = photo,
                         onPhotoClick = onPhotoClick,
                         modifier = Modifier.weight(1f)
                     )
@@ -419,42 +519,40 @@ private fun PhotoGrid(
 /**
  * Individual photo card in the memory grid
  *
- * @param memory Memory item to display
+ * @param photo Photo object to display
  * @param onPhotoClick Callback when clicked
  * @param modifier Modifier for styling
  */
 @Composable
 private fun PhotoCard(
-    memory: MemoryItem,
+    photo: Photo,
     onPhotoClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+
     Box(
         modifier = modifier
             .height(150.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(LightGray)
-            .clickable { onPhotoClick(memory.id) },
+            .clickable { onPhotoClick(photo.id.toString()) },
         contentAlignment = Alignment.Center
     ) {
-        // Placeholder for image
-        Icon(
-            imageVector = Icons.Filled.Image,
+        AsyncImage(
+            model = ImageRequest.Builder(context)
+                .data(photo.uri)
+                .crossfade(true)
+                .build(),
             contentDescription = "Photo",
-            modifier = Modifier.size(48.dp),
-            tint = TextMedium.copy(alpha = 0.5f)
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(12.dp)),
+            contentScale = ContentScale.Crop,
+            onError = {
+                // If image fails to load, show placeholder
+            }
         )
     }
 }
-
-/**
- * Data class representing a memory item
- *
- * @param id Unique identifier
- * @param filename Filename of the photo
- */
-data class MemoryItem(
-    val id: String,
-    val filename: String
-)
 

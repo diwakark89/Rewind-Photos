@@ -28,10 +28,12 @@ import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -40,12 +42,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thewalkersoft.rewindphotos.ui.theme.Orange
 import com.thewalkersoft.rewindphotos.ui.theme.TextDark
 import com.thewalkersoft.rewindphotos.ui.theme.TextMedium
 import com.thewalkersoft.rewindphotos.ui.theme.White
+import com.thewalkersoft.rewindphotos.ui.theme.LightGray
+import java.util.Calendar
 
 /**
  * Timeline Screen composable displaying memories organized by date and year
@@ -54,7 +61,7 @@ import com.thewalkersoft.rewindphotos.ui.theme.White
  * - Top navigation bar with settings and layers icons
  * - Date selector with dropdown and navigation arrows
  * - Calendar and layers quick actions
- * - Year filter chips (2025, 2024, 2019)
+ * - Year filter chips (dynamically calculated from gallery photos)
  * - Scrollable timeline showing memories grouped by year
  * - Memory count for each date
  * - Grid layout for memory photos
@@ -63,65 +70,146 @@ import com.thewalkersoft.rewindphotos.ui.theme.White
  * @param onSettingsClick Callback when settings icon is clicked
  * @param onPhotoClick Callback when a photo is clicked
  * @param onPhotosLongPress Callback for entering selection mode
+ * @param viewModel ViewModel for managing state
  */
 @Composable
 fun TimelineScreen(
     modifier: Modifier = Modifier,
     onSettingsClick: () -> Unit = {},
     onPhotoClick: (String) -> Unit = {},
-    onPhotosLongPress: () -> Unit = {}
+    onPhotosLongPress: () -> Unit = {},
+    viewModel: TimelineViewModel = hiltViewModel()
 ) {
-    val selectedYear = remember { mutableStateOf(2025) }
-    val selectedDate = remember { mutableStateOf("February 10") }
-    val years = listOf(2025, 2024, 2019)
+    val selectedYear = remember { mutableStateOf<Int?>(null) }
+    val selectedMonth = remember { mutableStateOf(0) }
+    val selectedDay = remember { mutableStateOf(1) }
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(White)
-    ) {
-        // Date Navigation Bar
-        DateNavigationBar(
-            currentDate = selectedDate.value,
-            onDateClick = { /* Handle date picker */ },
-            onSettingsClick = onSettingsClick,
-            onPreviousClick = { /* Navigate to previous date */ },
-            onNextClick = { /* Navigate to next date */ },
-            onCalendarClick = { /* Open calendar */ },
-            onLayersClick = { /* Open layers/filters */ }
-        )
+    when (val state = uiState) {
+        is TimelineUiState.Loading -> {
+            Box(
+                modifier = modifier
+                    .fillMaxSize()
+                    .background(White),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
+        }
 
-        // Year Filter Chips
-        YearFilterRow(
-            years = years,
-            selectedYear = selectedYear.value,
-            onYearSelected = { year -> selectedYear.value = year }
-        )
+        is TimelineUiState.Error -> {
+            Box(
+                modifier = modifier
+                    .fillMaxSize()
+                    .background(White),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Error: ${state.message}",
+                    color = TextDark,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
+        }
 
-        // Timeline Content
-        TimelineContent(
-            selectedYear = selectedYear.value,
-            selectedDate = selectedDate.value,
-            onPhotoClick = onPhotoClick,
-            onPhotosLongPress = onPhotosLongPress
-        )
+        is TimelineUiState.Empty -> {
+            Box(
+                modifier = modifier
+                    .fillMaxSize()
+                    .background(White),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "No photos available",
+                    color = TextMedium,
+                    fontSize = 16.sp
+                )
+            }
+        }
+
+        is TimelineUiState.Success -> {
+            // Initialize state
+            if (selectedYear.value == null) {
+                selectedYear.value = state.availableYears.firstOrNull()
+            }
+            if (selectedMonth.value == 0 && selectedDay.value == 1) {
+                selectedMonth.value = state.currentMonth
+                selectedDay.value = state.currentDay
+            }
+
+            Column(
+                modifier = modifier
+                    .fillMaxSize()
+                    .background(White)
+            ) {
+                // Date Navigation Bar
+                TimelineDateNavigationBar(
+                    currentMonth = selectedMonth.value,
+                    currentDay = selectedDay.value,
+                    onSettingsClick = onSettingsClick,
+                    onPreviousClick = {
+                        val calendar = Calendar.getInstance()
+                        calendar.set(Calendar.MONTH, selectedMonth.value)
+                        calendar.set(Calendar.DAY_OF_MONTH, selectedDay.value)
+                        calendar.add(Calendar.DAY_OF_MONTH, -1)
+                        selectedMonth.value = calendar.get(Calendar.MONTH)
+                        selectedDay.value = calendar.get(Calendar.DAY_OF_MONTH)
+                    },
+                    onNextClick = {
+                        val calendar = Calendar.getInstance()
+                        calendar.set(Calendar.MONTH, selectedMonth.value)
+                        calendar.set(Calendar.DAY_OF_MONTH, selectedDay.value)
+                        calendar.add(Calendar.DAY_OF_MONTH, 1)
+                        selectedMonth.value = calendar.get(Calendar.MONTH)
+                        selectedDay.value = calendar.get(Calendar.DAY_OF_MONTH)
+                    },
+                    onCalendarClick = { /* Open calendar */ },
+                    onLayersClick = { /* Open layers/filters */ }
+                )
+
+                // Year Filter Chips
+                TimelineYearFilterRow(
+                    years = state.availableYears,
+                    selectedYear = selectedYear.value ?: state.availableYears.first(),
+                    onYearSelected = { year -> selectedYear.value = year }
+                )
+
+                // Timeline Content
+                TimelineContent(
+                    selectedYear = selectedYear.value ?: state.availableYears.first(),
+                    selectedMonth = selectedMonth.value,
+                    selectedDay = selectedDay.value,
+                    allPhotos = state.allPhotos,
+                    onPhotoClick = onPhotoClick,
+                    onPhotosLongPress = onPhotosLongPress
+                )
+            }
+        }
     }
 }
 
 /**
- * Date navigation bar with date selector and action buttons
+ * Timeline date navigation bar with date selector and action buttons
  */
 @Composable
-private fun DateNavigationBar(
-    currentDate: String,
+private fun TimelineDateNavigationBar(
+    currentMonth: Int,
+    currentDay: Int,
     modifier: Modifier = Modifier,
-    onDateClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onPreviousClick: () -> Unit,
     onNextClick: () -> Unit,
     onCalendarClick: () -> Unit,
     onLayersClick: () -> Unit
 ) {
+    val monthNames = listOf(
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    )
+    val currentDate = "${monthNames[currentMonth]} $currentDay"
+
+    // ...existing code...
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -130,7 +218,6 @@ private fun DateNavigationBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-
         IconButton(
             onClick = onSettingsClick,
             modifier = Modifier.size(48.dp)
@@ -142,7 +229,6 @@ private fun DateNavigationBar(
                 tint = TextDark
             )
         }
-        // Previous Date Button
         IconButton(
             onClick = onPreviousClick,
             modifier = Modifier.size(40.dp)
@@ -154,19 +240,13 @@ private fun DateNavigationBar(
                 tint = TextDark
             )
         }
-
-        // Date Selector with dropdown
         Row(
             modifier = Modifier
                 .clip(RoundedCornerShape(24.dp))
                 .background(Color(0xFFF5F5F5))
-                .clickable { onDateClick() }
                 .padding(horizontal = 20.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
-        )
-
-
-        {
+        ) {
             Text(
                 text = currentDate,
                 fontSize = 16.sp,
@@ -181,8 +261,6 @@ private fun DateNavigationBar(
                 tint = TextDark
             )
         }
-
-        // Next Date Button
         IconButton(
             onClick = onNextClick,
             modifier = Modifier.size(40.dp)
@@ -194,8 +272,6 @@ private fun DateNavigationBar(
                 tint = TextDark
             )
         }
-
-        // Calendar Button
         IconButton(
             onClick = onCalendarClick,
             modifier = Modifier
@@ -210,8 +286,6 @@ private fun DateNavigationBar(
                 tint = White
             )
         }
-
-        // Layers Button
         IconButton(
             onClick = onLayersClick,
             modifier = Modifier
@@ -230,10 +304,10 @@ private fun DateNavigationBar(
 }
 
 /**
- * Year filter chips row
+ * Timeline year filter chips row with dynamic years
  */
 @Composable
-private fun YearFilterRow(
+private fun TimelineYearFilterRow(
     years: List<Int>,
     selectedYear: Int,
     onYearSelected: (Int) -> Unit,
@@ -248,7 +322,7 @@ private fun YearFilterRow(
         contentPadding = PaddingValues(horizontal = 16.dp)
     ) {
         items(years) { year ->
-            YearChip(
+            TimelineYearChip(
                 year = year,
                 isSelected = year == selectedYear,
                 onClick = { onYearSelected(year) }
@@ -258,15 +332,16 @@ private fun YearFilterRow(
 }
 
 /**
- * Individual year filter chip
+ * Individual year filter chip for timeline
  */
 @Composable
-private fun YearChip(
+private fun TimelineYearChip(
     year: Int,
     isSelected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // ...existing code...
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(24.dp))
@@ -290,141 +365,123 @@ private fun YearChip(
 @Composable
 private fun TimelineContent(
     selectedYear: Int,
-    selectedDate: String,
+    selectedMonth: Int,
+    selectedDay: Int,
+    allPhotos: List<com.thewalkersoft.rewindphotos.domain.model.Photo>,
     onPhotoClick: (String) -> Unit,
     onPhotosLongPress: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Filter photos for the selected date
+    val photosForDate = allPhotos.filter { photo ->
+        val photoCalendar = Calendar.getInstance()
+        photoCalendar.timeInMillis = photo.dateTaken
+        val photoYear = photoCalendar.get(Calendar.YEAR)
+        val photoMonth = photoCalendar.get(Calendar.MONTH)
+        val photoDay = photoCalendar.get(Calendar.DAY_OF_MONTH)
+
+        photoYear == selectedYear && photoMonth == selectedMonth && photoDay == selectedDay
+    }
+
+    val monthNames = listOf(
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    )
+    val dateString = "${monthNames[selectedMonth]} $selectedDay"
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .background(White),
-        contentPadding = PaddingValues(vertical = 8.dp)
+            .background(LightGray)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            YearSection(
-                year = selectedYear,
-                date = selectedDate,
-                memoryCount = 11,
-                onPhotoClick = onPhotoClick,
-                onPhotosLongPress = onPhotosLongPress
-            )
+            // Year and Memory Count Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = selectedYear.toString(),
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextDark
+                    )
+                    Text(
+                        text = dateString,
+                        fontSize = 14.sp,
+                        color = TextMedium,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+                Text(
+                    text = "${photosForDate.size} memories",
+                    fontSize = 14.sp,
+                    color = TextMedium
+                )
+            }
         }
 
-        item {
-            Spacer(modifier = Modifier.height(24.dp))
-        }
-
-        item {
-            YearSection(
-                year = 2024,
-                date = "February 10, 2024",
-                memoryCount = 8,
-                onPhotoClick = onPhotoClick,
-                onPhotosLongPress = onPhotosLongPress
-            )
+        // Photo Grid
+        if (photosForDate.isNotEmpty()) {
+            item {
+                TimelinePhotoGrid(
+                    photos = photosForDate,
+                    onPhotoClick = onPhotoClick,
+                    onPhotosLongPress = onPhotosLongPress
+                )
+            }
+        } else {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "No photos found for this date",
+                        color = TextMedium,
+                        fontSize = 14.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
         }
     }
 }
 
 /**
- * Year section with header and memory grid
+ * Timeline photo grid
  */
 @Composable
-private fun YearSection(
-    year: Int,
-    date: String,
-    memoryCount: Int,
+private fun TimelinePhotoGrid(
+    photos: List<com.thewalkersoft.rewindphotos.domain.model.Photo>,
     onPhotoClick: (String) -> Unit,
     onPhotosLongPress: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-    ) {
-        // Year Header
-        Text(
-            text = year.toString(),
-            fontSize = 32.sp,
-            fontWeight = FontWeight.Bold,
-            color = TextDark
-        )
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // Date and memory count
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = date,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Normal,
-                color = TextMedium
-            )
-            Text(
-                text = "$memoryCount memories",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Normal,
-                color = TextMedium
-            )
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // Memory Grid - showing placeholder screenshots
-        MemoryGrid(
-            memoryCount = memoryCount,
-            onPhotoClick = onPhotoClick,
-            onPhotosLongPress = onPhotosLongPress
-        )
-    }
-}
-
-/**
- * Grid of memory photos/screenshots
- */
-@Composable
-private fun MemoryGrid(
-    memoryCount: Int,
-    onPhotoClick: (String) -> Unit,
-    onPhotosLongPress: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    // Create a grid layout with 2 columns
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // Split memories into rows of 2
-        val rows = (memoryCount + 1) / 2
-        repeat(rows) { rowIndex ->
+        photos.chunked(2).forEach { row ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // First item in row
-                MemoryItem(
-                    index = rowIndex * 2,
-                    onPhotoClick = onPhotoClick,
-                    onPhotosLongPress = onPhotosLongPress,
-                    modifier = Modifier.weight(1f)
-                )
-
-                // Second item in row (if exists)
-                if (rowIndex * 2 + 1 < memoryCount) {
-                    MemoryItem(
-                        index = rowIndex * 2 + 1,
+                row.forEach { photo ->
+                    TimelinePhotoItem(
+                        photo = photo,
                         onPhotoClick = onPhotoClick,
                         onPhotosLongPress = onPhotosLongPress,
                         modifier = Modifier.weight(1f)
                     )
-                } else {
-                    // Empty space to maintain grid alignment
+                }
+                if (row.size == 1) {
                     Spacer(modifier = Modifier.weight(1f))
                 }
             }
@@ -433,11 +490,11 @@ private fun MemoryGrid(
 }
 
 /**
- * Individual memory item card
+ * Timeline photo item
  */
 @Composable
-private fun MemoryItem(
-    index: Int,
+private fun TimelinePhotoItem(
+    photo: com.thewalkersoft.rewindphotos.domain.model.Photo,
     onPhotoClick: (String) -> Unit,
     onPhotosLongPress: () -> Unit,
     modifier: Modifier = Modifier
@@ -445,10 +502,10 @@ private fun MemoryItem(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .height(200.dp)
+            .height(150.dp)
             .pointerInput(Unit) {
                 detectTapGestures(
-                    onTap = { onPhotoClick("photo_$index") },
+                    onTap = { onPhotoClick(photo.id.toString()) },
                     onLongPress = { onPhotosLongPress() }
                 )
             },
@@ -456,21 +513,11 @@ private fun MemoryItem(
         colors = CardDefaults.cardColors(
             containerColor = Color(0xFFF5F5F5)
         ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 0.dp
-        )
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            // Placeholder for actual photo
-            // In real implementation, use AsyncImage with photo URI
-            Text(
-                text = "Photo ${index + 1}",
-                fontSize = 14.sp,
-                color = TextMedium
-            )
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(text = "Photo", fontSize = 14.sp, color = TextMedium)
         }
     }
 }
+

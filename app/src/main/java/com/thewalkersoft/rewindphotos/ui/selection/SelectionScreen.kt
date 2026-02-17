@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -42,6 +43,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -50,14 +52,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.thewalkersoft.rewindphotos.ui.theme.Orange
 import com.thewalkersoft.rewindphotos.ui.theme.TextDark
 import com.thewalkersoft.rewindphotos.ui.theme.TextMedium
 import com.thewalkersoft.rewindphotos.ui.theme.White
+import com.thewalkersoft.rewindphotos.ui.theme.LightGray
+import java.util.Calendar
 
 /**
  * Selection Screen composable for selecting and managing photos
@@ -66,7 +74,7 @@ import com.thewalkersoft.rewindphotos.ui.theme.White
  * - Top navigation bar with cancel button (X icon in orange circle)
  * - Date selector with dropdown and navigation arrows
  * - Calendar and layers quick actions
- * - Year filter chips (2025, 2024, 2019)
+ * - Year filter chips (dynamically calculated from gallery photos)
  * - Scrollable timeline showing memories with selection checkboxes
  * - Bottom action bar with Cancel, Share, and Delete options
  * - Multi-select functionality with visual feedback
@@ -75,26 +83,142 @@ import com.thewalkersoft.rewindphotos.ui.theme.White
  * @param onExitSelectionMode Callback to exit selection mode
  * @param onShareSelected Callback when share is clicked
  * @param onDeleteSelected Callback when delete is clicked
+ * @param viewModel ViewModel for managing state
  */
 @Composable
 fun SelectionScreen(
     modifier: Modifier = Modifier,
     onExitSelectionMode: () -> Unit = {},
     onShareSelected: (List<String>) -> Unit = {},
-    onDeleteSelected: (List<String>) -> Unit = {}
+    onDeleteSelected: (List<String>) -> Unit = {},
+    viewModel: SelectionViewModel = hiltViewModel()
 ) {
     val selectedPhotos = remember { mutableStateListOf<String>() }
-    val selectedYear = remember { mutableStateOf(2025) }
-    val selectedDate = remember { mutableStateOf("February 10") }
-    val years = listOf(2025, 2024, 2019)
+    val selectedYear = remember { mutableStateOf<Int?>(null) }
+    val selectedMonth = remember { mutableStateOf(0) }
+    val selectedDay = remember { mutableStateOf(1) }
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
+    when (val state = uiState) {
+        is SelectionUiState.Loading -> {
+            Box(
+                modifier = modifier
+                    .fillMaxSize()
+                    .background(White),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
+        }
+
+        is SelectionUiState.Error -> {
+            Box(
+                modifier = modifier
+                    .fillMaxSize()
+                    .background(White),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Error: ${state.message}",
+                    color = TextDark,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
+        }
+
+        is SelectionUiState.Empty -> {
+            Box(
+                modifier = modifier
+                    .fillMaxSize()
+                    .background(White),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "No photos available",
+                    color = TextMedium,
+                    fontSize = 16.sp
+                )
+            }
+        }
+
+        is SelectionUiState.Success -> {
+            // Initialize state
+            if (selectedYear.value == null) {
+                selectedYear.value = state.availableYears.firstOrNull()
+            }
+            if (selectedMonth.value == 0 && selectedDay.value == 1) {
+                selectedMonth.value = state.currentMonth
+                selectedDay.value = state.currentDay
+            }
+
+            SelectionScreenContent(
+                modifier = modifier,
+                selectedPhotos = selectedPhotos,
+                selectedYear = selectedYear.value ?: state.availableYears.first(),
+                selectedMonth = selectedMonth.value,
+                selectedDay = selectedDay.value,
+                availableYears = state.availableYears,
+                allPhotos = state.allPhotos,
+                onExitSelectionMode = onExitSelectionMode,
+                onShareSelected = { onShareSelected(selectedPhotos.toList()) },
+                onDeleteSelected = { onDeleteSelected(selectedPhotos.toList()) },
+                onYearSelected = { year -> selectedYear.value = year },
+                onPreviousDate = {
+                    val calendar = Calendar.getInstance()
+                    calendar.set(Calendar.MONTH, selectedMonth.value)
+                    calendar.set(Calendar.DAY_OF_MONTH, selectedDay.value)
+                    calendar.add(Calendar.DAY_OF_MONTH, -1)
+                    selectedMonth.value = calendar.get(Calendar.MONTH)
+                    selectedDay.value = calendar.get(Calendar.DAY_OF_MONTH)
+                },
+                onNextDate = {
+                    val calendar = Calendar.getInstance()
+                    calendar.set(Calendar.MONTH, selectedMonth.value)
+                    calendar.set(Calendar.DAY_OF_MONTH, selectedDay.value)
+                    calendar.add(Calendar.DAY_OF_MONTH, 1)
+                    selectedMonth.value = calendar.get(Calendar.MONTH)
+                    selectedDay.value = calendar.get(Calendar.DAY_OF_MONTH)
+                },
+                onPhotoToggle = { photoId ->
+                    if (selectedPhotos.contains(photoId)) {
+                        selectedPhotos.remove(photoId)
+                    } else {
+                        selectedPhotos.add(photoId)
+                    }
+                }
+            )
+        }
+    }
+}
+
+/**
+ * Selection screen content with all UI components
+ */
+@Composable
+private fun SelectionScreenContent(
+    modifier: Modifier = Modifier,
+    selectedPhotos: List<String>,
+    selectedYear: Int,
+    selectedMonth: Int,
+    selectedDay: Int,
+    availableYears: List<Int>,
+    allPhotos: List<com.thewalkersoft.rewindphotos.domain.model.Photo>,
+    onExitSelectionMode: () -> Unit = {},
+    onShareSelected: () -> Unit = {},
+    onDeleteSelected: () -> Unit = {},
+    onYearSelected: (Int) -> Unit = {},
+    onPreviousDate: () -> Unit = {},
+    onNextDate: () -> Unit = {},
+    onPhotoToggle: (String) -> Unit = {}
+) {
     Scaffold(
         bottomBar = {
             SelectionBottomBar(
                 selectedCount = selectedPhotos.size,
                 onCancel = onExitSelectionMode,
-                onShare = { onShareSelected(selectedPhotos.toList()) },
-                onDelete = { onDeleteSelected(selectedPhotos.toList()) }
+                onShare = onShareSelected,
+                onDelete = onDeleteSelected
             )
         }
     ) { paddingValues ->
@@ -110,34 +234,30 @@ fun SelectionScreen(
             )
 
             // Date Navigation Bar
-            DateNavigationBar(
-                currentDate = selectedDate.value,
-                onDateClick = { /* Handle date picker */ },
-                onPreviousClick = { /* Navigate to previous date */ },
-                onNextClick = { /* Navigate to next date */ },
-                onCalendarClick = { /* Open calendar */ },
-                onLayersClick = { /* Open layers/filters */ }
+            SelectionDateNavigationBar(
+                currentMonth = selectedMonth,
+                currentDay = selectedDay,
+                onPreviousClick = onPreviousDate,
+                onNextClick = onNextDate,
+                onCalendarClick = { /* Handle calendar */ },
+                onLayersClick = { /* Handle layers */ }
             )
 
             // Year Filter Chips
-            YearFilterRow(
-                years = years,
-                selectedYear = selectedYear.value,
-                onYearSelected = { year -> selectedYear.value = year }
+            SelectionYearFilterRow(
+                years = availableYears,
+                selectedYear = selectedYear,
+                onYearSelected = onYearSelected
             )
 
             // Timeline Content with Selection
             SelectionTimelineContent(
-                selectedYear = selectedYear.value,
-                selectedDate = selectedDate.value,
+                selectedYear = selectedYear,
+                selectedMonth = selectedMonth,
+                selectedDay = selectedDay,
+                allPhotos = allPhotos,
                 selectedPhotos = selectedPhotos,
-                onPhotoToggle = { photoId ->
-                    if (selectedPhotos.contains(photoId)) {
-                        selectedPhotos.remove(photoId)
-                    } else {
-                        selectedPhotos.add(photoId)
-                    }
-                }
+                onPhotoToggle = onPhotoToggle
             )
         }
     }
@@ -184,15 +304,21 @@ private fun SelectionTopBar(
  * Date navigation bar with date selector and action buttons
  */
 @Composable
-private fun DateNavigationBar(
-    currentDate: String,
-    onDateClick: () -> Unit,
+private fun SelectionDateNavigationBar(
+    currentMonth: Int,
+    currentDay: Int,
     onPreviousClick: () -> Unit,
     onNextClick: () -> Unit,
     onCalendarClick: () -> Unit,
     onLayersClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val monthNames = listOf(
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    )
+    val currentDate = "${monthNames[currentMonth]} $currentDay"
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -219,7 +345,6 @@ private fun DateNavigationBar(
             modifier = Modifier
                 .clip(RoundedCornerShape(24.dp))
                 .background(Color(0xFFF5F5F5))
-                .clickable { onDateClick() }
                 .padding(horizontal = 20.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -286,10 +411,10 @@ private fun DateNavigationBar(
 }
 
 /**
- * Year filter chips row
+ * Year filter chips row with dynamic years
  */
 @Composable
-private fun YearFilterRow(
+private fun SelectionYearFilterRow(
     years: List<Int>,
     selectedYear: Int,
     onYearSelected: (Int) -> Unit,
@@ -304,7 +429,7 @@ private fun YearFilterRow(
         contentPadding = PaddingValues(horizontal = 16.dp)
     ) {
         items(years) { year ->
-            YearChip(
+            SelectionYearChip(
                 year = year,
                 isSelected = year == selectedYear,
                 onClick = { onYearSelected(year) }
@@ -313,11 +438,12 @@ private fun YearFilterRow(
     }
 }
 
+
 /**
  * Individual year filter chip
  */
 @Composable
-private fun YearChip(
+private fun SelectionYearChip(
     year: Int,
     isSelected: Boolean,
     onClick: () -> Unit,
@@ -341,93 +467,97 @@ private fun YearChip(
 }
 
 /**
- * Timeline content in selection mode with checkboxes
+ * Timeline content in selection mode with checkboxes and real photo filtering
  */
 @Composable
 private fun SelectionTimelineContent(
     selectedYear: Int,
-    selectedDate: String,
+    selectedMonth: Int,
+    selectedDay: Int,
+    allPhotos: List<com.thewalkersoft.rewindphotos.domain.model.Photo>,
     selectedPhotos: List<String>,
     onPhotoToggle: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Filter photos for the selected date
+    val photosForDate = allPhotos.filter { photo ->
+        val photoCalendar = Calendar.getInstance()
+        photoCalendar.timeInMillis = photo.dateTaken
+        val photoYear = photoCalendar.get(Calendar.YEAR)
+        val photoMonth = photoCalendar.get(Calendar.MONTH)
+        val photoDay = photoCalendar.get(Calendar.DAY_OF_MONTH)
+
+        photoYear == selectedYear && photoMonth == selectedMonth && photoDay == selectedDay
+    }
+
+    val monthNames = listOf(
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    )
+    val dateString = "${monthNames[selectedMonth]} $selectedDay"
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .background(White),
-        contentPadding = PaddingValues(vertical = 8.dp)
+            .background(LightGray)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Year 2025 Section
         item {
-            SelectionYearSection(
-                year = 2025,
-                date = "February 10, 2025",
-                memoryCount = 11,
-                selectedPhotos = selectedPhotos,
-                onPhotoToggle = onPhotoToggle
-            )
+            // Year and Memory Count Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = selectedYear.toString(),
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextDark
+                    )
+                    Text(
+                        text = dateString,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = TextMedium
+                    )
+                }
+                Text(
+                    text = "${photosForDate.size} memories",
+                    fontSize = 14.sp,
+                    color = TextMedium
+                )
+            }
         }
 
-        item {
-            Spacer(modifier = Modifier.height(24.dp))
+        // Photo Grid with Selection
+        if (photosForDate.isNotEmpty()) {
+            item {
+                SelectionMemoryGrid(
+                    photos = photosForDate,
+                    selectedPhotos = selectedPhotos,
+                    onPhotoToggle = onPhotoToggle
+                )
+            }
+        } else {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "No photos found for this date",
+                        color = TextMedium,
+                        fontSize = 14.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
         }
-
-        // Year 2024 Section
-        item {
-            SelectionYearSection(
-                year = 2024,
-                date = "February 10, 2024",
-                memoryCount = 8,
-                selectedPhotos = selectedPhotos,
-                onPhotoToggle = onPhotoToggle
-            )
-        }
-    }
-}
-
-/**
- * Year section in selection mode
- */
-@Composable
-private fun SelectionYearSection(
-    year: Int,
-    date: String,
-    memoryCount: Int,
-    selectedPhotos: List<String>,
-    onPhotoToggle: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-    ) {
-        // Year Header
-        Text(
-            text = year.toString(),
-            fontSize = 32.sp,
-            fontWeight = FontWeight.Bold,
-            color = TextDark
-        )
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // Date and memory count
-        Text(
-            text = date,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Normal,
-            color = TextMedium
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // Memory Grid with Selection
-        SelectionMemoryGrid(
-            memoryCount = memoryCount,
-            selectedPhotos = selectedPhotos,
-            onPhotoToggle = onPhotoToggle
-        )
     }
 }
 
@@ -436,7 +566,7 @@ private fun SelectionYearSection(
  */
 @Composable
 private fun SelectionMemoryGrid(
-    memoryCount: Int,
+    photos: List<com.thewalkersoft.rewindphotos.domain.model.Photo>,
     selectedPhotos: List<String>,
     onPhotoToggle: (String) -> Unit,
     modifier: Modifier = Modifier
@@ -445,29 +575,21 @@ private fun SelectionMemoryGrid(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        val rows = (memoryCount + 1) / 2
-        repeat(rows) { rowIndex ->
+        photos.chunked(2).forEach { row ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // First item in row
-                SelectionMemoryItem(
-                    photoId = "photo_${rowIndex * 2}",
-                    isSelected = selectedPhotos.contains("photo_${rowIndex * 2}"),
-                    onToggle = onPhotoToggle,
-                    modifier = Modifier.weight(1f)
-                )
-
-                // Second item in row (if exists)
-                if (rowIndex * 2 + 1 < memoryCount) {
+                row.forEach { photo ->
                     SelectionMemoryItem(
-                        photoId = "photo_${rowIndex * 2 + 1}",
-                        isSelected = selectedPhotos.contains("photo_${rowIndex * 2 + 1}"),
+                        photo = photo,
+                        isSelected = selectedPhotos.contains(photo.id.toString()),
                         onToggle = onPhotoToggle,
                         modifier = Modifier.weight(1f)
                     )
-                } else {
+                }
+                // Empty space if odd number of items
+                if (row.size == 1) {
                     Spacer(modifier = Modifier.weight(1f))
                 }
             }
@@ -480,16 +602,18 @@ private fun SelectionMemoryGrid(
  */
 @Composable
 private fun SelectionMemoryItem(
-    photoId: String,
+    photo: com.thewalkersoft.rewindphotos.domain.model.Photo,
     isSelected: Boolean,
     onToggle: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+
     Card(
         modifier = modifier
             .fillMaxWidth()
             .height(200.dp)
-            .clickable { onToggle(photoId) },
+            .clickable { onToggle(photo.id.toString()) },
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = Color(0xFFF5F5F5)
@@ -501,17 +625,18 @@ private fun SelectionMemoryItem(
         Box(
             modifier = Modifier.fillMaxSize()
         ) {
-            // Placeholder for actual photo
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = photoId,
-                    fontSize = 14.sp,
-                    color = TextMedium
-                )
-            }
+            // Actual photo image
+            AsyncImage(
+                model = coil.request.ImageRequest.Builder(context)
+                    .data(photo.uri)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = "Photo",
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(12.dp)),
+                contentScale = ContentScale.Crop
+            )
 
             // Selection overlay
             if (isSelected) {
