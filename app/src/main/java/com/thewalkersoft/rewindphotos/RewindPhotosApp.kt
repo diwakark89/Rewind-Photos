@@ -4,7 +4,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material.icons.filled.Timeline
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -31,11 +31,11 @@ import com.thewalkersoft.rewindphotos.ui.gallery.PHOTO_DETAIL_ROUTE
 import com.thewalkersoft.rewindphotos.ui.gallery.PHOTO_URI_ARG
 import com.thewalkersoft.rewindphotos.ui.gallery.PHOTO_DATE_ARG
 import com.thewalkersoft.rewindphotos.ui.gallery.photoDetailScreen
+import com.thewalkersoft.rewindphotos.ui.rewind.RewindScreen
 import com.thewalkersoft.rewindphotos.ui.selection.SelectionScreen
 import com.thewalkersoft.rewindphotos.ui.settings.SettingsScreen
-import com.thewalkersoft.rewindphotos.ui.timeline.TimelineScreen
 
-private const val TIMELINE_ROUTE = "timeline"
+private const val REWIND_ROUTE = "rewind"
 private const val SETTINGS_ROUTE = "settings"
 private const val SELECTION_ROUTE = "selection"
 
@@ -64,7 +64,7 @@ fun RewindPhotosApp(
 
     LaunchedEffect(currentRoute) {
         selectedTab = when (currentRoute) {
-            TIMELINE_ROUTE -> 0
+            REWIND_ROUTE -> 0
             GALLERY_ROUTE -> 1
             else -> selectedTabState.value
         }
@@ -76,13 +76,13 @@ fun RewindPhotosApp(
             if (hasPermission) {
                 NavigationBar {
                     NavigationBarItem(
-                        icon = { Icon(Icons.Filled.Timeline, contentDescription = null) },
-                        label = { Text(stringResource(R.string.timeline_nav_label)) },
+                        icon = { Icon(Icons.Filled.History, contentDescription = null) },
+                        label = { Text(stringResource(R.string.rewind_nav_label)) },
                         selected = selectedTab == 0,
                         onClick = {
                             selectedTab = 0
-                            navController.navigate(TIMELINE_ROUTE) {
-                                popUpTo(TIMELINE_ROUTE) { inclusive = true }
+                            navController.navigate(REWIND_ROUTE) {
+                                popUpTo(REWIND_ROUTE) { inclusive = true }
                             }
                         }
                     )
@@ -93,7 +93,7 @@ fun RewindPhotosApp(
                         onClick = {
                             selectedTab = 1
                             navController.navigate(GALLERY_ROUTE) {
-                                popUpTo(TIMELINE_ROUTE)
+                                popUpTo(REWIND_ROUTE)
                             }
                         }
                     )
@@ -103,14 +103,14 @@ fun RewindPhotosApp(
     ) { paddingValues ->
         NavHost(
             navController = navController,
-            startDestination = TIMELINE_ROUTE,
+            startDestination = REWIND_ROUTE,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Timeline Screen - New main screen with year filtering
-            composable(TIMELINE_ROUTE) {
-                TimelineScreen(
+            // Rewind Screen - New main screen with year filtering
+            composable(REWIND_ROUTE) {
+                RewindScreen(
                     onSettingsClick = {
                         navController.navigate(SETTINGS_ROUTE)
                     },

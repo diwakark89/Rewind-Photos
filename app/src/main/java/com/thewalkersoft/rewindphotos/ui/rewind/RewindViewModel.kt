@@ -1,4 +1,4 @@
-package com.thewalkersoft.rewindphotos.ui.timeline
+package com.thewalkersoft.rewindphotos.ui.rewind
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -13,16 +13,16 @@ import java.util.Calendar
 import javax.inject.Inject
 
 /**
- * ViewModel for the Timeline screen.
- * Manages state for displaying memories organized by timeline with dynamic year filtering.
+ * ViewModel for the Rewind screen.
+ * Manages state for displaying memories organized by date with dynamic year filtering.
  */
 @HiltViewModel
-class TimelineViewModel @Inject constructor(
+class RewindViewModel @Inject constructor(
     private val getAllPhotosUseCase: GetAllPhotosUseCase
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow<TimelineUiState>(TimelineUiState.Loading)
-    val uiState: StateFlow<TimelineUiState> = _uiState.asStateFlow()
+    private val _uiState = MutableStateFlow<RewindUiState>(RewindUiState.Loading)
+    val uiState: StateFlow<RewindUiState> = _uiState.asStateFlow()
 
     init {
         loadPhotos()
@@ -30,11 +30,11 @@ class TimelineViewModel @Inject constructor(
 
     private fun loadPhotos() {
         viewModelScope.launch {
-            _uiState.value = TimelineUiState.Loading
+            _uiState.value = RewindUiState.Loading
             try {
                 getAllPhotosUseCase().collect { photos ->
                     if (photos.isEmpty()) {
-                        _uiState.value = TimelineUiState.Empty
+                        _uiState.value = RewindUiState.Empty
                     } else {
                         // Extract available years from photos and sort in descending order
                         val availableYears = photos
@@ -49,7 +49,7 @@ class TimelineViewModel @Inject constructor(
                         val currentDay = calendar.get(Calendar.DAY_OF_MONTH)
                         val currentDate = formatDate(currentMonth, currentDay)
 
-                        _uiState.value = TimelineUiState.Success(
+                        _uiState.value = RewindUiState.Success(
                             allPhotos = photos,
                             availableYears = availableYears,
                             currentDate = currentDate,
@@ -59,7 +59,7 @@ class TimelineViewModel @Inject constructor(
                     }
                 }
             } catch (e: Exception) {
-                _uiState.value = TimelineUiState.Error("Failed to load photos: ${e.message}")
+                _uiState.value = RewindUiState.Error("Failed to load photos: ${e.message}")
             }
         }
     }
@@ -84,19 +84,18 @@ class TimelineViewModel @Inject constructor(
 }
 
 /**
- * Represents the different states of the Timeline screen UI.
+ * Represents the different states of the Rewind screen UI.
  */
-sealed class TimelineUiState {
-    data object Loading : TimelineUiState()
-    data object Empty : TimelineUiState()
+sealed class RewindUiState {
+    data object Loading : RewindUiState()
+    data object Empty : RewindUiState()
     data class Success(
         val allPhotos: List<Photo>,
         val availableYears: List<Int>,
         val currentDate: String,
         val currentMonth: Int,
         val currentDay: Int
-    ) : TimelineUiState()
+    ) : RewindUiState()
 
-    data class Error(val message: String) : TimelineUiState()
+    data class Error(val message: String) : RewindUiState()
 }
-

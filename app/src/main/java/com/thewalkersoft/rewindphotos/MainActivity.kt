@@ -43,7 +43,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             RewindPhotosTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { paddingValues ->
+                Scaffold(modifier = Modifier.fillMaxSize()) { _ ->
                     PermissionAwareApp()
                 }
             }

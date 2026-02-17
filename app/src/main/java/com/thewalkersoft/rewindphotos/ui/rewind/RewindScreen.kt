@@ -1,4 +1,4 @@
-package com.thewalkersoft.rewindphotos.ui.timeline
+package com.thewalkersoft.rewindphotos.ui.rewind
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -33,6 +33,7 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -52,6 +53,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -59,6 +61,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.thewalkersoft.rewindphotos.ui.theme.Orange
+import com.thewalkersoft.rewindphotos.ui.theme.RewindPhotosTheme
 import com.thewalkersoft.rewindphotos.ui.theme.TextDark
 import com.thewalkersoft.rewindphotos.ui.theme.TextMedium
 import com.thewalkersoft.rewindphotos.ui.theme.White
@@ -70,14 +73,14 @@ import java.util.Calendar
 import java.util.Locale
 
 /**
- * Timeline Screen composable displaying memories organized by date and year
+ * Rewind Screen composable displaying memories organized by date and year
  *
  * Features:
  * - Top navigation bar with settings and layers icons
  * - Date selector with dropdown and navigation arrows
  * - Calendar and layers quick actions
  * - Year filter chips (dynamically calculated from gallery photos)
- * - Scrollable timeline showing memories grouped by year
+ * - Scrollable rewind view showing memories grouped by year
  * - Memory count for each date
  * - Grid layout for memory photos
  *
@@ -89,12 +92,12 @@ import java.util.Locale
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TimelineScreen(
+fun RewindScreen(
     modifier: Modifier = Modifier,
     onSettingsClick: () -> Unit = {},
     onPhotoClick: (String) -> Unit = {},
     onPhotosLongPress: () -> Unit = {},
-    viewModel: TimelineViewModel = hiltViewModel()
+    viewModel: RewindViewModel = hiltViewModel()
 ) {
     var selectedYear by remember { mutableStateOf<Int?>(null) }
     var selectedMonth by remember { mutableIntStateOf(-1) }
@@ -103,7 +106,7 @@ fun TimelineScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     when (val state = uiState) {
-        is TimelineUiState.Loading -> {
+        is RewindUiState.Loading -> {
             Box(
                 modifier = modifier
                     .fillMaxSize()
@@ -114,7 +117,7 @@ fun TimelineScreen(
             }
         }
 
-        is TimelineUiState.Error -> {
+        is RewindUiState.Error -> {
             Box(
                 modifier = modifier
                     .fillMaxSize()
@@ -130,7 +133,7 @@ fun TimelineScreen(
             }
         }
 
-        is TimelineUiState.Empty -> {
+        is RewindUiState.Empty -> {
             Box(
                 modifier = modifier
                     .fillMaxSize()
@@ -145,7 +148,7 @@ fun TimelineScreen(
             }
         }
 
-        is TimelineUiState.Success -> {
+        is RewindUiState.Success -> {
             if (selectedYear == null) {
                 selectedYear = state.availableYears.firstOrNull()
             }
@@ -205,7 +208,7 @@ fun TimelineScreen(
                     .background(White)
             ) {
                 // Date Navigation Bar
-                TimelineDateNavigationBar(
+                RewindDateNavigationBar(
                     currentMonth = selectedMonth,
                     currentDay = selectedDay,
                     onSettingsClick = onSettingsClick,
@@ -229,14 +232,14 @@ fun TimelineScreen(
                 )
 
                 // Year Filter Chips
-                TimelineYearFilterRow(
+                RewindYearFilterRow(
                     years = state.availableYears,
                     selectedYear = selectedYear ?: state.availableYears.first(),
                     onYearSelected = { year -> selectedYear = year }
                 )
 
-                // Timeline Content
-                TimelineContent(
+                // Rewind Content
+                RewindContent(
                     selectedYear = selectedYear ?: state.availableYears.first(),
                     selectedMonth = selectedMonth,
                     selectedDay = selectedDay,
@@ -250,10 +253,10 @@ fun TimelineScreen(
 }
 
 /**
- * Timeline date navigation bar with date selector and action buttons
+ * Rewind date navigation bar with date selector and action buttons
  */
 @Composable
-private fun TimelineDateNavigationBar(
+private fun RewindDateNavigationBar(
     currentMonth: Int,
     currentDay: Int,
     modifier: Modifier = Modifier,
@@ -348,10 +351,10 @@ private fun TimelineDateNavigationBar(
 }
 
 /**
- * Timeline year filter chips row with dynamic years
+ * Rewind year filter chips row with dynamic years
  */
 @Composable
-private fun TimelineYearFilterRow(
+private fun RewindYearFilterRow(
     years: List<Int>,
     selectedYear: Int,
     onYearSelected: (Int) -> Unit,
@@ -366,7 +369,7 @@ private fun TimelineYearFilterRow(
         contentPadding = PaddingValues(horizontal = 16.dp)
     ) {
         items(years) { year ->
-            TimelineYearChip(
+            RewindYearChip(
                 year = year,
                 isSelected = year == selectedYear,
                 onClick = { onYearSelected(year) }
@@ -376,10 +379,10 @@ private fun TimelineYearFilterRow(
 }
 
 /**
- * Individual year filter chip for timeline
+ * Individual year filter chip for rewind
  */
 @Composable
-private fun TimelineYearChip(
+private fun RewindYearChip(
     year: Int,
     isSelected: Boolean,
     onClick: () -> Unit,
@@ -403,10 +406,10 @@ private fun TimelineYearChip(
 }
 
 /**
- * Timeline content showing memories grouped by year
+ * Rewind content showing memories grouped by year
  */
 @Composable
-private fun TimelineContent(
+private fun RewindContent(
     selectedYear: Int,
     selectedMonth: Int,
     selectedDay: Int,
@@ -441,7 +444,7 @@ private fun TimelineContent(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            // Year and Memory Count Header
+            // Rewind and Memory Count Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -472,7 +475,7 @@ private fun TimelineContent(
         // Photo Grid
         if (photosForDate.isNotEmpty()) {
             item {
-                TimelinePhotoGrid(
+                RewindPhotoGrid(
                     photos = photosForDate,
                     onPhotoClick = onPhotoClick,
                     onPhotosLongPress = onPhotosLongPress
@@ -499,10 +502,10 @@ private fun TimelineContent(
 }
 
 /**
- * Timeline photo grid
+ * Rewind photo grid
  */
 @Composable
-private fun TimelinePhotoGrid(
+private fun RewindPhotoGrid(
     photos: List<com.thewalkersoft.rewindphotos.domain.model.Photo>,
     onPhotoClick: (String) -> Unit,
     onPhotosLongPress: () -> Unit,
@@ -518,7 +521,7 @@ private fun TimelinePhotoGrid(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 row.forEach { photo ->
-                    TimelinePhotoItem(
+                    RewindPhotoItem(
                         photo = photo,
                         onPhotoClick = onPhotoClick,
                         onPhotosLongPress = onPhotosLongPress,
@@ -534,10 +537,10 @@ private fun TimelinePhotoGrid(
 }
 
 /**
- * Timeline photo item
+ * Rewind photo item
  */
 @Composable
-private fun TimelinePhotoItem(
+private fun RewindPhotoItem(
     photo: com.thewalkersoft.rewindphotos.domain.model.Photo,
     onPhotoClick: (String) -> Unit,
     onPhotosLongPress: () -> Unit,
@@ -571,6 +574,16 @@ private fun TimelinePhotoItem(
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
             )
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun RewindScreenPreview() {
+    RewindPhotosTheme {
+        Surface {
+            RewindScreen()
         }
     }
 }

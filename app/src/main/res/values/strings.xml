@@ -1,5 +1,5 @@
 <resources>
     <string name="app_name">RewindPhotos</string>
-    <string name="timeline_nav_label">Timeline</string>
+    <string name="rewind_nav_label">Rewind</string>
     <string name="gallery_nav_label">Gallery</string>
 </resources>

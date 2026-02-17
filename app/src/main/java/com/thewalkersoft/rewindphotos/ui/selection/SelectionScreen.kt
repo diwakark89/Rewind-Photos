@@ -75,7 +75,7 @@ import java.util.Calendar
  * - Date selector with dropdown and navigation arrows
  * - Calendar and layers quick actions
  * - Year filter chips (dynamically calculated from gallery photos)
- * - Scrollable timeline showing memories with selection checkboxes
+ * - Scrollable rewind view showing memories with selection checkboxes
  * - Bottom action bar with Cancel, Share, and Delete options
  * - Multi-select functionality with visual feedback
  *
@@ -250,8 +250,8 @@ private fun SelectionScreenContent(
                 onYearSelected = onYearSelected
             )
 
-            // Timeline Content with Selection
-            SelectionTimelineContent(
+            // Rewind Content with Selection
+            SelectionRewindContent(
                 selectedYear = selectedYear,
                 selectedMonth = selectedMonth,
                 selectedDay = selectedDay,
@@ -467,10 +467,10 @@ private fun SelectionYearChip(
 }
 
 /**
- * Timeline content in selection mode with checkboxes and real photo filtering
+ * Rewind content in selection mode with checkboxes and real photo filtering
  */
 @Composable
-private fun SelectionTimelineContent(
+private fun SelectionRewindContent(
     selectedYear: Int,
     selectedMonth: Int,
     selectedDay: Int,
@@ -777,4 +777,3 @@ private fun SelectionInfo(
         )
     }
 }
-
