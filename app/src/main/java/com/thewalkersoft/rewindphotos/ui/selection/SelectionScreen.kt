@@ -629,6 +629,8 @@ private fun SelectionMemoryItem(
             AsyncImage(
                 model = coil.request.ImageRequest.Builder(context)
                     .data(photo.uri)
+                    .memoryCacheKey("photo_${photo.id}")
+                    .diskCacheKey("photo_${photo.id}")
                     .crossfade(true)
                     .build(),
                 contentDescription = "Photo",

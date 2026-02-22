@@ -31,22 +31,24 @@ object CoilModule {
     ): ImageLoader {
         return ImageLoader.Builder(context)
             // Memory Cache: Store recently loaded images in RAM
-            // 256MB allows caching 100+ high-quality thumbnails
+            // 30% of app memory allows caching 150+ high-quality thumbnails
             .memoryCache {
                 MemoryCache.Builder(context)
-                    .maxSizePercent(0.25) // Use 25% of available app memory (typically 256MB+)
+                    .maxSizePercent(0.30) // Use 30% of available app memory
                     .build()
             }
             // Disk Cache: Store images on device storage for faster reloads
-            // When user jumps back to 2026, images load from disk cache instantly
+            // 1GB disk cache ensures photos from all years remain cached
             .diskCache {
                 DiskCache.Builder()
                     .directory(context.cacheDir.resolve("image_cache"))
-                    .maxSizeBytes(500L * 1024L * 1024L) // 500MB disk cache
+                    .maxSizeBytes(1024L * 1024L * 1024L) // 1GB disk cache
                     .build()
             }
-            // Crossfade for smooth image transitions
+            // Enable crossfade for smooth transitions
             .crossfade(true)
+            // Respect cache headers from MediaStore
+            .respectCacheHeaders(false) // Ignore cache headers for local files
             // Build the ImageLoader
             .build()
     }

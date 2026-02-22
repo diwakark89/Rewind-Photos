@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
+import coil.request.ImageRequest
 import com.thewalkersoft.rewindphotos.domain.model.Photo
 import com.thewalkersoft.rewindphotos.ui.theme.RewindPhotosTheme
 import java.text.SimpleDateFormat
@@ -247,6 +248,8 @@ private fun PhotoCard(
     photo: Photo,
     onPhotoClick: () -> Unit = {}
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+
     Box(modifier = modifier.size(120.dp)) {
         Card(
             modifier = Modifier
@@ -259,9 +262,14 @@ private fun PhotoCard(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                // Async image loading using Coil with progress indicator
+                // Async image loading using Coil with progress indicator and cache keys
                 SubcomposeAsyncImage(
-                    model = photo.uri,
+                    model = ImageRequest.Builder(context)
+                        .data(photo.uri)
+                        .memoryCacheKey("photo_${photo.id}")
+                        .diskCacheKey("photo_${photo.id}")
+                        .crossfade(true)
+                        .build(),
                     contentDescription = "Photo taken on ${formatDate(photo.dateTaken)}",
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,

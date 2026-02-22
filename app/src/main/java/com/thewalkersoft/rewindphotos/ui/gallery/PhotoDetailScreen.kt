@@ -16,8 +16,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import coil.compose.SubcomposeAsyncImage
+import coil.request.ImageRequest
 import com.thewalkersoft.rewindphotos.domain.model.Photo
 
 /**
@@ -29,6 +31,8 @@ fun PhotoDetailScreen(
     photo: Photo,
     onClose: () -> Unit
 ) {
+    val context = LocalContext.current
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -36,7 +40,12 @@ fun PhotoDetailScreen(
     ) {
         // Full screen photo with loading state
         SubcomposeAsyncImage(
-            model = photo.uri,
+            model = ImageRequest.Builder(context)
+                .data(photo.uri)
+                .memoryCacheKey("photo_${photo.id}")
+                .diskCacheKey("photo_${photo.id}")
+                .crossfade(true)
+                .build(),
             contentDescription = "Full screen photo",
             modifier = Modifier
                 .fillMaxSize()

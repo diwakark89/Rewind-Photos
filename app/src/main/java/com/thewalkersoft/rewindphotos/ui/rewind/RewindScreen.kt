@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.ImageLoader
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.thewalkersoft.rewindphotos.ui.theme.Orange
@@ -494,11 +495,12 @@ private fun RewindMonthSection(
     )
     val monthName = monthNames[monthSection.month]
     val context = LocalContext.current
+    val imageLoader = coil.compose.LocalImageLoader.current
 
     // Preload first few photos from this month section when it becomes visible
     // This ensures smooth rendering and faster navigation back to this section
     LaunchedEffect(monthSection.year, monthSection.month) {
-        // Preload first 3-6 photos in background
+        // Preload first 6 photos in background using the singleton ImageLoader
         monthSection.photos.take(6).forEach { photo ->
             try {
                 val imageRequest = ImageRequest.Builder(context)
@@ -508,8 +510,8 @@ private fun RewindMonthSection(
                     .size(400, 400)
                     .build()
 
-                // Enqueue for caching without displaying
-                coil.ImageLoader(context).execute(imageRequest)
+                // Enqueue for caching using the singleton ImageLoader
+                imageLoader.enqueue(imageRequest)
             } catch (e: Exception) {
                 // Silent fail - preloading is non-critical
             }
