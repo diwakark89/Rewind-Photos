@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -103,6 +104,7 @@ fun RewindScreen(
     var selectedMonth by remember { mutableIntStateOf(-1) }
     var selectedDay by remember { mutableIntStateOf(-1) }
     var selectedYear by remember { mutableIntStateOf(-1) }
+    var isScrolling by remember { mutableStateOf(false) }
     val showDatePicker = remember { mutableStateOf(false) }
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -160,13 +162,16 @@ fun RewindScreen(
                 selectedDay = state.currentDay
             }
 
-            // Auto-scroll to target section with safety check
+            // Auto-scroll to target section with safety check and loading indicator
             LaunchedEffect(scrollToIndex) {
                 if (scrollToIndex >= 0 && scrollToIndex < state.groupedPhotosData.sections.size) {
+                    isScrolling = true
                     try {
                         lazyListState.animateScrollToItem(scrollToIndex)
                     } catch (e: Exception) {
                         android.util.Log.e("RewindScreen", "Error scrolling to index: $scrollToIndex", e)
+                    } finally {
+                        isScrolling = false
                     }
                 }
             }
@@ -217,58 +222,67 @@ fun RewindScreen(
                 }
             }
 
-            Column(
+            Box(
                 modifier = modifier
                     .fillMaxSize()
                     .background(White)
             ) {
-                // Date Navigation Bar
-                RewindDateNavigationBar(
-                    currentMonth = selectedMonth,
-                    currentDay = selectedDay,
-                    onSettingsClick = onSettingsClick,
-                    onPreviousClick = {
-                        val calendar = Calendar.getInstance()
-                        calendar.set(Calendar.YEAR, selectedYear)
-                        calendar.set(Calendar.MONTH, selectedMonth)
-                        calendar.set(Calendar.DAY_OF_MONTH, selectedDay)
-                        calendar.add(Calendar.DAY_OF_MONTH, -1)
-                        selectedYear = calendar.get(Calendar.YEAR)
-                        selectedMonth = calendar.get(Calendar.MONTH)
-                        selectedDay = calendar.get(Calendar.DAY_OF_MONTH)
-                        viewModel.onDateSelected(selectedYear, selectedMonth, selectedDay)
-                    },
-                    onNextClick = {
-                        val calendar = Calendar.getInstance()
-                        calendar.set(Calendar.YEAR, selectedYear)
-                        calendar.set(Calendar.MONTH, selectedMonth)
-                        calendar.set(Calendar.DAY_OF_MONTH, selectedDay)
-                        calendar.add(Calendar.DAY_OF_MONTH, 1)
-                        selectedYear = calendar.get(Calendar.YEAR)
-                        selectedMonth = calendar.get(Calendar.MONTH)
-                        selectedDay = calendar.get(Calendar.DAY_OF_MONTH)
-                        viewModel.onDateSelected(selectedYear, selectedMonth, selectedDay)
-                    },
-                    onCalendarClick = { showDatePicker.value = true }
-                )
+                Column(
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    // Date Navigation Bar
+                    RewindDateNavigationBar(
+                        currentMonth = selectedMonth,
+                        currentDay = selectedDay,
+                        onSettingsClick = onSettingsClick,
+                        onPreviousClick = {
+                            val calendar = Calendar.getInstance()
+                            calendar.set(Calendar.YEAR, selectedYear)
+                            calendar.set(Calendar.MONTH, selectedMonth)
+                            calendar.set(Calendar.DAY_OF_MONTH, selectedDay)
+                            calendar.add(Calendar.DAY_OF_MONTH, -1)
+                            selectedYear = calendar.get(Calendar.YEAR)
+                            selectedMonth = calendar.get(Calendar.MONTH)
+                            selectedDay = calendar.get(Calendar.DAY_OF_MONTH)
+                            viewModel.onDateSelected(selectedYear, selectedMonth, selectedDay)
+                        },
+                        onNextClick = {
+                            val calendar = Calendar.getInstance()
+                            calendar.set(Calendar.YEAR, selectedYear)
+                            calendar.set(Calendar.MONTH, selectedMonth)
+                            calendar.set(Calendar.DAY_OF_MONTH, selectedDay)
+                            calendar.add(Calendar.DAY_OF_MONTH, 1)
+                            selectedYear = calendar.get(Calendar.YEAR)
+                            selectedMonth = calendar.get(Calendar.MONTH)
+                            selectedDay = calendar.get(Calendar.DAY_OF_MONTH)
+                            viewModel.onDateSelected(selectedYear, selectedMonth, selectedDay)
+                        },
+                        onCalendarClick = { showDatePicker.value = true }
+                    )
 
-                // Year Filter Chips
-                RewindYearFilterRow(
-                    years = state.availableYears,
-                    selectedYear = selectedYear,
-                    onYearSelected = { year ->
-                        selectedYear = year
-                        viewModel.onYearSelected(year)
-                    }
-                )
+                    // Year Filter Chips
+                    RewindYearFilterRow(
+                        years = state.availableYears,
+                        selectedYear = selectedYear,
+                        onYearSelected = { year ->
+                            selectedYear = year
+                            viewModel.onYearSelected(year)
+                        }
+                    )
 
-                // Month-grouped Content
-                RewindContent(
-                    groupedPhotosData = state.groupedPhotosData,
-                    lazyListState = lazyListState,
-                    onPhotoClick = onPhotoClick,
-                    onPhotosLongPress = onPhotosLongPress
-                )
+                    // Month-grouped Content
+                    RewindContent(
+                        groupedPhotosData = state.groupedPhotosData,
+                        lazyListState = lazyListState,
+                        onPhotoClick = onPhotoClick,
+                        onPhotosLongPress = onPhotosLongPress
+                    )
+                }
+
+                // Loading overlay during scroll transitions
+                if (isScrolling) {
+                    ScrollingLoadingOverlay(selectedYear, selectedMonth, selectedDay)
+                }
             }
         }
     }
@@ -465,6 +479,7 @@ private fun RewindContent(
 
 /**
  * Month section composable showing month header with location and photo grid
+ * Includes intelligent image preloading for better performance
  */
 @Composable
 private fun RewindMonthSection(
@@ -478,6 +493,28 @@ private fun RewindMonthSection(
         "July", "August", "September", "October", "November", "December"
     )
     val monthName = monthNames[monthSection.month]
+    val context = LocalContext.current
+
+    // Preload first few photos from this month section when it becomes visible
+    // This ensures smooth rendering and faster navigation back to this section
+    LaunchedEffect(monthSection.year, monthSection.month) {
+        // Preload first 3-6 photos in background
+        monthSection.photos.take(6).forEach { photo ->
+            try {
+                val imageRequest = ImageRequest.Builder(context)
+                    .data(photo.uri)
+                    .memoryCacheKey("photo_${photo.id}")
+                    .diskCacheKey("photo_${photo.id}")
+                    .size(400, 400)
+                    .build()
+
+                // Enqueue for caching without displaying
+                coil.ImageLoader(context).execute(imageRequest)
+            } catch (e: Exception) {
+                // Silent fail - preloading is non-critical
+            }
+        }
+    }
 
     Column(modifier = modifier.fillMaxWidth()) {
         // Month Header with Location and Memory Count
@@ -518,7 +555,7 @@ private fun RewindMonthSection(
 }
 
 /**
- * Rewind photo grid - 2 column layout
+ * Rewind photo grid - 3 column layout with optimized rendering
  */
 @Composable
 private fun RewindPhotoGrid(
@@ -531,20 +568,25 @@ private fun RewindPhotoGrid(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        photos.chunked(2).forEach { row ->
+        // Chunked rendering for efficient three-column layout
+        photos.chunked(3).forEachIndexed { _, row ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                row.forEach { photo ->
-                    RewindPhotoItem(
-                        photo = photo,
-                        onPhotoClick = onPhotoClick,
-                        onPhotosLongPress = onPhotosLongPress,
-                        modifier = Modifier.weight(1f)
-                    )
+                row.forEachIndexed { _, photo ->
+                    // Use unique key for efficient recomposition
+                    key(photo.id) {
+                        RewindPhotoItem(
+                            photo = photo,
+                            onPhotoClick = onPhotoClick,
+                            onPhotosLongPress = onPhotosLongPress,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
-                if (row.size == 1) {
+                // Spacers for rows with less than 3 items
+                repeat(3 - row.size) {
                     Spacer(modifier = Modifier.weight(1f))
                 }
             }
@@ -553,7 +595,8 @@ private fun RewindPhotoGrid(
 }
 
 /**
- * Rewind photo item card
+ * Rewind photo item card - optimized for performance with lazy loading and aggressive caching
+ * Uses adaptive sizing with aspectRatio for responsive 3x3 grid
  */
 @Composable
 private fun RewindPhotoItem(
@@ -567,7 +610,7 @@ private fun RewindPhotoItem(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .height(150.dp)
+            .aspectRatio(1f) // Square photos - adaptive sizing
             .pointerInput(Unit) {
                 detectTapGestures(
                     onTap = { onPhotoClick(photo.id.toString()) },
@@ -581,14 +624,95 @@ private fun RewindPhotoItem(
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            // Highly optimized image loading with aggressive multi-level caching
             AsyncImage(
                 model = ImageRequest.Builder(context)
                     .data(photo.uri)
-                    .crossfade(true)
+                    .crossfade(durationMillis = 150) // Faster crossfade
+                    .size(400, 400) // Load at slightly higher res for better quality
+                    // Aggressive caching: memory > disk > network
+                    .memoryCacheKey("photo_${photo.id}") // Unique key for efficient cache lookup
+                    .diskCacheKey("photo_${photo.id}") // Persistent disk cache key
                     .build(),
                 contentDescription = "Photo",
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
+            )
+        }
+    }
+}
+
+/**
+ * Loading overlay composable displayed during date transitions.
+ * Shows a loading indicator and message when jumping to past or future dates.
+ */
+@Composable
+private fun ScrollingLoadingOverlay(
+    year: Int,
+    month: Int,
+    day: Int,
+    modifier: Modifier = Modifier
+) {
+    val monthNames = listOf(
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    )
+    val monthName = monthNames[month]
+    val currentYear = Calendar.getInstance().get(Calendar.YEAR)
+    val currentMonth = Calendar.getInstance().get(Calendar.MONTH)
+
+    // Determine if we're jumping to past or future
+    val timeDirection = when {
+        year < currentYear -> "Past"
+        year > currentYear -> "Future"
+        month < currentMonth -> "Earlier in the year"
+        month > currentMonth -> "Later in the year"
+        else -> "This date"
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(White.copy(alpha = 0.95f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier
+                .padding(32.dp)
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier
+                    .size(64.dp)
+                    .padding(bottom = 24.dp),
+                color = Orange,
+                strokeWidth = 4.dp
+            )
+
+            Text(
+                text = "Jumping to the $timeDirection",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = TextDark,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+
+            Text(
+                text = "$monthName $day, $year",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = Orange,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+
+            Text(
+                text = "Loading your memories...",
+                fontSize = 14.sp,
+                color = TextMedium,
+                textAlign = TextAlign.Center
             )
         }
     }
