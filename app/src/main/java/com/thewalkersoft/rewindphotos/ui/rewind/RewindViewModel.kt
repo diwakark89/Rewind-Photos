@@ -32,8 +32,11 @@ class RewindViewModel @Inject constructor(
     private val _selectedYear = MutableStateFlow<Int?>(null)
     val selectedYear: StateFlow<Int?> = _selectedYear.asStateFlow()
 
-    private val _scrollToIndex = MutableStateFlow(-1)
-    val scrollToIndex: StateFlow<Int> = _scrollToIndex.asStateFlow()
+    private val _scrollRequest = MutableStateFlow(ScrollRequest(index = -1, animate = false))
+    val scrollRequest: StateFlow<ScrollRequest> = _scrollRequest.asStateFlow()
+
+    private var photosByYearCache: Map<Int, List<Photo>> = emptyMap()
+    private var yearFirstSectionIndexCache: Map<Int, Int> = emptyMap()
 
     init {
         loadPhotos()
@@ -67,7 +70,10 @@ class RewindViewModel @Inject constructor(
                         _selectedYear.value = currentYear
 
                         // Auto-scroll to current date on initial load
-                        _scrollToIndex.value = groupedPhotosData.closestSectionIndex
+                        _scrollRequest.value = ScrollRequest(
+                            index = groupedPhotosData.closestSectionIndex,
+                            animate = false
+                        )
 
                         _uiState.value = RewindUiState.Success(
                             groupedPhotosData = groupedPhotosData,
@@ -92,13 +98,22 @@ class RewindViewModel @Inject constructor(
         val zoneId = ZoneId.systemDefault()
         val monthMap = mutableMapOf<Pair<Int, Int>, MutableList<Photo>>() // (year, month) -> photos
 
-        // Group photos by (year, month)
-        for (photo in photos) {
-            if (photo.dateTaken <= 0L) continue
+        val photosByYear = photos
+            .asSequence()
+            .filter { it.dateTaken > 0L }
+            .groupBy {
+                Instant.ofEpochMilli(it.dateTaken).atZone(zoneId).year
+            }
 
-            val photoDate = Instant.ofEpochMilli(photo.dateTaken).atZone(zoneId).toLocalDate()
-            val key = Pair(photoDate.year, photoDate.monthValue - 1) // month 0-11
-            monthMap.getOrPut(key) { mutableListOf() }.add(photo)
+        photosByYearCache = photosByYear
+
+        // Group photos by (year, month)
+        for ((_, yearPhotos) in photosByYear) {
+            for (photo in yearPhotos) {
+                val photoDate = Instant.ofEpochMilli(photo.dateTaken).atZone(zoneId).toLocalDate()
+                val key = Pair(photoDate.year, photoDate.monthValue - 1) // month 0-11
+                monthMap.getOrPut(key) { mutableListOf() }.add(photo)
+            }
         }
 
         // Create month sections and sort in reverse chronological order
@@ -109,9 +124,15 @@ class RewindViewModel @Inject constructor(
             MonthSection(year, month, location, photoList)
         }.sortedWith(compareBy<MonthSection> { it.year }.thenBy { it.month }.reversed())
 
+        val yearIndexMap = mutableMapOf<Int, Int>()
+        sections.forEachIndexed { index, section ->
+            yearIndexMap.putIfAbsent(section.year, index)
+        }
+        yearFirstSectionIndexCache = yearIndexMap
+
         // Find closest section to today
         val today = LocalDate.now()
-        val closestIndex = findClosestSectionIndex(sections, today.year, today.monthValue - 1, today.dayOfMonth)
+        val closestIndex = findClosestSectionIndex(sections, today.year, today.monthValue - 1)
 
         return GroupedPhotosData(sections, closestIndex)
     }
@@ -119,13 +140,11 @@ class RewindViewModel @Inject constructor(
     /**
      * Find the index of the section closest to the selected date.
      * Tries to match exact month, then searches nearby months.
-     * The targetDay parameter helps find the best matching section within the same month.
      */
     private fun findClosestSectionIndex(
         sections: List<MonthSection>,
         targetYear: Int,
-        targetMonth: Int,
-        targetDay: Int
+        targetMonth: Int
     ): Int {
         if (sections.isEmpty()) return 0
 
@@ -159,8 +178,8 @@ class RewindViewModel @Inject constructor(
     fun onDateSelected(year: Int, month: Int, day: Int) {
         val state = _uiState.value
         if (state is RewindUiState.Success) {
-            val closestIndex = findClosestSectionIndex(state.groupedPhotosData.sections, year, month, day)
-            _scrollToIndex.value = closestIndex
+            val closestIndex = findClosestSectionIndex(state.groupedPhotosData.sections, year, month)
+            _scrollRequest.value = ScrollRequest(index = closestIndex, animate = true)
         }
     }
 
@@ -171,10 +190,10 @@ class RewindViewModel @Inject constructor(
         _selectedYear.value = year
         val state = _uiState.value
         if (state is RewindUiState.Success) {
-            // Find first section of selected year
-            val yearIndex = state.groupedPhotosData.sections.indexOfFirst { it.year == year }
+            val yearIndex = yearFirstSectionIndexCache[year]
+                ?: state.groupedPhotosData.sections.indexOfFirst { it.year == year }
             if (yearIndex != -1) {
-                _scrollToIndex.value = yearIndex
+                _scrollRequest.value = ScrollRequest(index = yearIndex, animate = false)
             }
         }
     }
@@ -200,3 +219,11 @@ sealed class RewindUiState {
 
     data class Error(val message: String) : RewindUiState()
 }
+
+/**
+ * Scroll request details for jump/animate behavior.
+ */
+data class ScrollRequest(
+    val index: Int,
+    val animate: Boolean
+)

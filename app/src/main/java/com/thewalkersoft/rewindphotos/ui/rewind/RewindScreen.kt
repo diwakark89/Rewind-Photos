@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -54,6 +55,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -62,15 +64,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.ImageLoader
 import coil.compose.AsyncImage
+import coil.imageLoader
 import coil.request.ImageRequest
+import coil.size.Precision
+import com.thewalkersoft.rewindphotos.ui.theme.LightGray
 import com.thewalkersoft.rewindphotos.ui.theme.Orange
 import com.thewalkersoft.rewindphotos.ui.theme.RewindPhotosTheme
 import com.thewalkersoft.rewindphotos.ui.theme.TextDark
 import com.thewalkersoft.rewindphotos.ui.theme.TextMedium
 import com.thewalkersoft.rewindphotos.ui.theme.White
-import com.thewalkersoft.rewindphotos.ui.theme.LightGray
 import java.util.Calendar
 import java.util.Locale
 
@@ -109,7 +112,7 @@ fun RewindScreen(
     val showDatePicker = remember { mutableStateOf(false) }
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val scrollToIndex by viewModel.scrollToIndex.collectAsStateWithLifecycle()
+    val scrollRequest by viewModel.scrollRequest.collectAsStateWithLifecycle()
     val lazyListState = rememberLazyListState()
 
     when (val state = uiState) {
@@ -163,16 +166,39 @@ fun RewindScreen(
                 selectedDay = state.currentDay
             }
 
+            val context = LocalContext.current
+            val imageLoader = context.imageLoader
+            val prefetchSizePx = with(LocalDensity.current) { 200.dp.roundToPx() }
+
+            LaunchedEffect(selectedYear, state.groupedPhotosData.sections) {
+                val firstSection = state.groupedPhotosData.sections.firstOrNull { it.year == selectedYear }
+                firstSection?.photos?.take(12)?.forEach { photo ->
+                    val imageRequest = ImageRequest.Builder(context)
+                        .data(photo.uri)
+                        .memoryCacheKey("photo_${photo.id}")
+                        .diskCacheKey("photo_${photo.id}")
+                        .size(prefetchSizePx, prefetchSizePx)
+                        .build()
+                    imageLoader.enqueue(imageRequest)
+                }
+            }
+
             // Auto-scroll to target section with safety check and loading indicator
-            LaunchedEffect(scrollToIndex) {
-                if (scrollToIndex >= 0 && scrollToIndex < state.groupedPhotosData.sections.size) {
-                    isScrolling = true
-                    try {
-                        lazyListState.animateScrollToItem(scrollToIndex)
-                    } catch (e: Exception) {
-                        android.util.Log.e("RewindScreen", "Error scrolling to index: $scrollToIndex", e)
-                    } finally {
+            LaunchedEffect(scrollRequest) {
+                val index = scrollRequest.index
+                if (index >= 0 && index < state.groupedPhotosData.sections.size) {
+                    if (scrollRequest.animate) {
+                        isScrolling = true
+                        try {
+                            lazyListState.animateScrollToItem(index)
+                        } catch (e: Exception) {
+                            android.util.Log.e("RewindScreen", "Error scrolling to index: $index", e)
+                        } finally {
+                            isScrolling = false
+                        }
+                    } else {
                         isScrolling = false
+                        lazyListState.scrollToItem(index)
                     }
                 }
             }
@@ -495,7 +521,7 @@ private fun RewindMonthSection(
     )
     val monthName = monthNames[monthSection.month]
     val context = LocalContext.current
-    val imageLoader = coil.compose.LocalImageLoader.current
+    val imageLoader = context.imageLoader
 
     // Preload first few photos from this month section when it becomes visible
     // This ensures smooth rendering and faster navigation back to this section
@@ -507,7 +533,7 @@ private fun RewindMonthSection(
                     .data(photo.uri)
                     .memoryCacheKey("photo_${photo.id}")
                     .diskCacheKey("photo_${photo.id}")
-                    .size(400, 400)
+                    .size(200, 200)
                     .build()
 
                 // Enqueue for caching using the singleton ImageLoader
@@ -609,37 +635,45 @@ private fun RewindPhotoItem(
 ) {
     val context = LocalContext.current
 
-    Card(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
-            .aspectRatio(1f) // Square photos - adaptive sizing
+            .aspectRatio(1f)
             .pointerInput(Unit) {
                 detectTapGestures(
                     onTap = { onPhotoClick(photo.id.toString()) },
                     onLongPress = { onPhotosLongPress() }
                 )
-            },
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFF5F5F5)
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            }
     ) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            // Highly optimized image loading with aggressive multi-level caching
-            AsyncImage(
-                model = ImageRequest.Builder(context)
-                    .data(photo.uri)
-                    .crossfade(durationMillis = 150) // Faster crossfade
-                    .size(400, 400) // Load at slightly higher res for better quality
-                    // Aggressive caching: memory > disk > network
-                    .memoryCacheKey("photo_${photo.id}") // Unique key for efficient cache lookup
-                    .diskCacheKey("photo_${photo.id}") // Persistent disk cache key
-                    .build(),
-                contentDescription = "Photo",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
+        val sizePx = with(LocalDensity.current) { maxWidth.roundToPx() }
+        val imageRequest = remember(photo.id, sizePx) {
+            ImageRequest.Builder(context)
+                .data(photo.uri)
+                .crossfade(durationMillis = 150)
+                .size(sizePx, sizePx)
+                .precision(Precision.INEXACT)
+                .memoryCacheKey("photo_${photo.id}")
+                .diskCacheKey("photo_${photo.id}")
+                .build()
+        }
+
+        Card(
+            modifier = Modifier.fillMaxSize(),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFFF5F5F5)
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        ) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                AsyncImage(
+                    model = imageRequest,
+                    contentDescription = "Photo",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            }
         }
     }
 }
@@ -729,4 +763,3 @@ private fun RewindScreenPreview() {
         }
     }
 }
-
