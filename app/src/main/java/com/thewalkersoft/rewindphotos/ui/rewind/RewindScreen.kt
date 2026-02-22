@@ -5,7 +5,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -54,6 +53,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -68,6 +68,8 @@ import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.ImageRequest
 import coil.size.Precision
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.yield
 import com.thewalkersoft.rewindphotos.ui.theme.LightGray
 import com.thewalkersoft.rewindphotos.ui.theme.Orange
 import com.thewalkersoft.rewindphotos.ui.theme.RewindPhotosTheme
@@ -180,6 +182,7 @@ fun RewindScreen(
                         .size(prefetchSizePx, prefetchSizePx)
                         .build()
                     imageLoader.enqueue(imageRequest)
+                    delay(6)
                 }
             }
 
@@ -198,6 +201,7 @@ fun RewindScreen(
                         }
                     } else {
                         isScrolling = false
+                        yield()
                         lazyListState.scrollToItem(index)
                     }
                 }
@@ -523,6 +527,20 @@ private fun RewindMonthSection(
     val context = LocalContext.current
     val imageLoader = context.imageLoader
 
+    val totalPhotos = monthSection.photos.size
+    var visiblePhotoCount by remember(monthSection.year, monthSection.month) {
+        mutableIntStateOf(kotlin.math.min(6, totalPhotos))
+    }
+
+    LaunchedEffect(monthSection.year, monthSection.month, totalPhotos) {
+        var currentCount = visiblePhotoCount
+        while (currentCount < totalPhotos) {
+            delay(32)
+            currentCount = kotlin.math.min(currentCount + 6, totalPhotos)
+            visiblePhotoCount = currentCount
+        }
+    }
+
     // Preload first few photos from this month section when it becomes visible
     // This ensures smooth rendering and faster navigation back to this section
     LaunchedEffect(monthSection.year, monthSection.month) {
@@ -538,7 +556,7 @@ private fun RewindMonthSection(
 
                 // Enqueue for caching using the singleton ImageLoader
                 imageLoader.enqueue(imageRequest)
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 // Silent fail - preloading is non-critical
             }
         }
@@ -575,7 +593,7 @@ private fun RewindMonthSection(
 
         // Photo Grid
         RewindPhotoGrid(
-            photos = monthSection.photos,
+            photos = monthSection.photos.take(visiblePhotoCount),
             onPhotoClick = onPhotoClick,
             onPhotosLongPress = onPhotosLongPress
         )
@@ -634,8 +652,12 @@ private fun RewindPhotoItem(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val density = LocalDensity.current
+    val rowWidthDp = configuration.screenWidthDp.dp - 48.dp
+    val cellSizePx = with(density) { (rowWidthDp / 3).roundToPx() }
 
-    BoxWithConstraints(
+    Box(
         modifier = modifier
             .fillMaxWidth()
             .aspectRatio(1f)
@@ -646,12 +668,11 @@ private fun RewindPhotoItem(
                 )
             }
     ) {
-        val sizePx = with(LocalDensity.current) { maxWidth.roundToPx() }
-        val imageRequest = remember(photo.id, sizePx) {
+        val imageRequest = remember(photo.id, cellSizePx) {
             ImageRequest.Builder(context)
                 .data(photo.uri)
                 .crossfade(durationMillis = 150)
-                .size(sizePx, sizePx)
+                .size(cellSizePx, cellSizePx)
                 .precision(Precision.INEXACT)
                 .memoryCacheKey("photo_${photo.id}")
                 .diskCacheKey("photo_${photo.id}")
