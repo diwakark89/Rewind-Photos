@@ -2,7 +2,6 @@ package com.thewalkersoft.rewindphotos.ui.rewind
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,7 +11,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -51,7 +49,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -95,7 +92,6 @@ import java.util.Locale
  * @param modifier Modifier for styling
  * @param onSettingsClick Callback when settings icon is clicked
  * @param onPhotoClick Callback when a photo is clicked
- * @param onPhotosLongPress Callback for entering selection mode
  * @param viewModel ViewModel for managing state
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -104,7 +100,6 @@ fun RewindScreen(
     modifier: Modifier = Modifier,
     onSettingsClick: () -> Unit = {},
     onPhotoClick: (String) -> Unit = {},
-    onPhotosLongPress: () -> Unit = {},
     viewModel: RewindViewModel = hiltViewModel()
 ) {
     var selectedMonth by remember { mutableIntStateOf(-1) }
@@ -305,8 +300,7 @@ fun RewindScreen(
                     RewindContent(
                         groupedPhotosData = state.groupedPhotosData,
                         lazyListState = lazyListState,
-                        onPhotoClick = onPhotoClick,
-                        onPhotosLongPress = onPhotosLongPress
+                        onPhotoClick = onPhotoClick
                     )
                 }
 
@@ -481,7 +475,6 @@ private fun RewindContent(
     groupedPhotosData: com.thewalkersoft.rewindphotos.domain.model.GroupedPhotosData,
     lazyListState: LazyListState,
     onPhotoClick: (String) -> Unit,
-    onPhotosLongPress: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val sections = groupedPhotosData.sections
@@ -501,8 +494,7 @@ private fun RewindContent(
             val section = sections[sectionIndex]
             RewindMonthSection(
                 monthSection = section,
-                onPhotoClick = onPhotoClick,
-                onPhotosLongPress = onPhotosLongPress
+                onPhotoClick = onPhotoClick
             )
         }
     }
@@ -516,7 +508,6 @@ private fun RewindContent(
 private fun RewindMonthSection(
     monthSection: com.thewalkersoft.rewindphotos.domain.model.MonthSection,
     onPhotoClick: (String) -> Unit,
-    onPhotosLongPress: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val monthNames = listOf(
@@ -594,8 +585,7 @@ private fun RewindMonthSection(
         // Photo Grid
         RewindPhotoGrid(
             photos = monthSection.photos.take(visiblePhotoCount),
-            onPhotoClick = onPhotoClick,
-            onPhotosLongPress = onPhotosLongPress
+            onPhotoClick = onPhotoClick
         )
     }
 }
@@ -607,7 +597,6 @@ private fun RewindMonthSection(
 private fun RewindPhotoGrid(
     photos: List<com.thewalkersoft.rewindphotos.domain.model.Photo>,
     onPhotoClick: (String) -> Unit,
-    onPhotosLongPress: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -626,7 +615,6 @@ private fun RewindPhotoGrid(
                         RewindPhotoItem(
                             photo = photo,
                             onPhotoClick = onPhotoClick,
-                            onPhotosLongPress = onPhotosLongPress,
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -648,7 +636,6 @@ private fun RewindPhotoGrid(
 private fun RewindPhotoItem(
     photo: com.thewalkersoft.rewindphotos.domain.model.Photo,
     onPhotoClick: (String) -> Unit,
-    onPhotosLongPress: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -661,12 +648,7 @@ private fun RewindPhotoItem(
         modifier = modifier
             .fillMaxWidth()
             .aspectRatio(1f)
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onTap = { onPhotoClick(photo.id.toString()) },
-                    onLongPress = { onPhotosLongPress() }
-                )
-            }
+            .clickable { onPhotoClick(photo.id.toString()) }
     ) {
         val imageRequest = remember(photo.id, cellSizePx) {
             ImageRequest.Builder(context)

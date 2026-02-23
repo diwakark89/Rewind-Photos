@@ -117,10 +117,6 @@ fun RewindPhotosApp(
                     onPhotoClick = { _ ->
                         // Navigate to photo detail if needed
                         // navController.navigate("$PHOTO_DETAIL_ROUTE?photoId=$photoId")
-                    },
-                    onPhotosLongPress = {
-                        // Enter selection mode
-                        navController.navigate(SELECTION_ROUTE)
                     }
                 )
             }
