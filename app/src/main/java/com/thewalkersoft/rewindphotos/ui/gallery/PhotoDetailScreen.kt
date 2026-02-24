@@ -1,5 +1,6 @@
 package com.thewalkersoft.rewindphotos.ui.gallery
 
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -13,6 +14,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -20,11 +22,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
+import com.thewalkersoft.rewindphotos.domain.model.MediaType
 import com.thewalkersoft.rewindphotos.domain.model.Photo
 
 /**
- * Full-screen photo detail screen.
+ * Full-screen photo/video detail screen.
  * Displays a photo in full screen with zoom capability and a close button.
+ * For videos, launches the system video player.
  */
 @Composable
 fun PhotoDetailScreen(
@@ -32,6 +36,25 @@ fun PhotoDetailScreen(
     onClose: () -> Unit
 ) {
     val context = LocalContext.current
+
+    // If it's a video, launch the system video player immediately and close
+    LaunchedEffect(photo) {
+        if (photo.mediaType == MediaType.VIDEO) {
+            try {
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(android.net.Uri.parse(photo.uri), "video/*")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                android.util.Log.e("PhotoDetailScreen", "Failed to open video", e)
+            }
+            onClose()
+        }
+    }
+
+    // Only show image detail for photos, not videos
+    if (photo.mediaType != MediaType.VIDEO) {
 
     Box(
         modifier = Modifier
@@ -80,5 +103,6 @@ fun PhotoDetailScreen(
             )
         }
     }
+    } // End of if (photo.mediaType != MediaType.VIDEO)
 }
 

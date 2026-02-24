@@ -53,6 +53,7 @@ class MainActivity : ComponentActivity() {
 
 /**
  * Composable that handles permission requests and displays the app.
+ * For Android 13+, requests both READ_MEDIA_IMAGES and READ_MEDIA_VIDEO permissions.
  */
 @Composable
 @Suppress("DEPRECATION")
@@ -60,6 +61,14 @@ private fun PermissionAwareApp() {
     val permissionState = remember { mutableStateOf(false) }
     val activity = LocalContext.current as? ComponentActivity
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    // For Android 13+, we need to request multiple permissions
+    val requestMultiplePermissionsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        // Check if all required permissions are granted
+        permissionState.value = permissions.values.all { it }
+    }
 
     val requestPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -71,17 +80,32 @@ private fun PermissionAwareApp() {
     val checkPermission: () -> Unit = remember {
         {
             if (activity != null) {
-                val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    Manifest.permission.READ_MEDIA_IMAGES
-                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    Manifest.permission.READ_EXTERNAL_STORAGE
-                } else {
-                    null
-                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    // Android 13+ requires separate permissions for images and videos
+                    val imagePermission = Manifest.permission.READ_MEDIA_IMAGES
+                    val videoPermission = Manifest.permission.READ_MEDIA_VIDEO
 
-                if (permission == null) {
-                    permissionState.value = true
+                    val hasImagePermission = ContextCompat.checkSelfPermission(
+                        activity,
+                        imagePermission
+                    ) == PackageManager.PERMISSION_GRANTED
+
+                    val hasVideoPermission = ContextCompat.checkSelfPermission(
+                        activity,
+                        videoPermission
+                    ) == PackageManager.PERMISSION_GRANTED
+
+                    if (hasImagePermission && hasVideoPermission) {
+                        permissionState.value = true
+                    } else {
+                        // Request both permissions
+                        requestMultiplePermissionsLauncher.launch(
+                            arrayOf(imagePermission, videoPermission)
+                        )
+                    }
                 } else {
+                    // Android 12 and below use READ_EXTERNAL_STORAGE
+                    val permission = Manifest.permission.READ_EXTERNAL_STORAGE
                     val isGranted = ContextCompat.checkSelfPermission(
                         activity,
                         permission
@@ -89,8 +113,9 @@ private fun PermissionAwareApp() {
 
                     if (isGranted) {
                         permissionState.value = true
-                    } else
+                    } else {
                         requestPermissionLauncher.launch(permission)
+                    }
                 }
             }
         }

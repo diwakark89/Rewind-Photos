@@ -78,6 +78,7 @@ dependencies {
 
     // Coil for image loading
     implementation(libs.coil.compose)
+    implementation("io.coil-kt:coil-video:2.7.0") // Video frame extraction
 
     // Navigation
     implementation(libs.androidx.navigation.compose)

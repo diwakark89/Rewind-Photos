@@ -1,14 +1,11 @@
 package com.thewalkersoft.rewindphotos.data.repository
 
-import android.app.Activity
 import android.app.RecoverableSecurityException
 import android.content.ContentUris
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.os.Build
 import android.provider.MediaStore
-import androidx.activity.result.ActivityResultLauncher
-import androidx.activity.result.IntentSenderRequest
 import com.thewalkersoft.rewindphotos.data.util.PerceptualHashUtils
 import com.thewalkersoft.rewindphotos.di.DefaultDispatcher
 import com.thewalkersoft.rewindphotos.di.IoDispatcher
@@ -107,27 +104,37 @@ class MediaStoreRepository @Inject constructor(
     override suspend fun deletePhoto(photoId: Long): Boolean {
         return withContext(ioDispatcher) {
             try {
-                android.util.Log.d("MediaStoreRepository", "=== DELETE PHOTO STARTED ===")
-                android.util.Log.d("MediaStoreRepository", "Photo ID: $photoId")
+                android.util.Log.d("MediaStoreRepository", "=== DELETE MEDIA STARTED ===")
+                android.util.Log.d("MediaStoreRepository", "Media ID: $photoId")
                 android.util.Log.d("MediaStoreRepository", "Android API Level: ${Build.VERSION.SDK_INT}")
 
-                val uri = ContentUris.withAppendedId(
+                // Try to delete as image first
+                var uri = ContentUris.withAppendedId(
                     MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
                     photoId
                 )
 
-                android.util.Log.d("MediaStoreRepository", "Photo URI: $uri")
-                android.util.Log.d("MediaStoreRepository", "Executing ContentResolver.delete()")
+                android.util.Log.d("MediaStoreRepository", "Trying Image URI: $uri")
+                var deletedCount = context.contentResolver.delete(uri, null, null)
 
-                val deletedCount = context.contentResolver.delete(uri, null, null)
+                // If image deletion failed, try as video
+                if (deletedCount == 0) {
+                    android.util.Log.d("MediaStoreRepository", "Not an image, trying as video")
+                    uri = ContentUris.withAppendedId(
+                        MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                        photoId
+                    )
+                    android.util.Log.d("MediaStoreRepository", "Video URI: $uri")
+                    deletedCount = context.contentResolver.delete(uri, null, null)
+                }
 
                 android.util.Log.d("MediaStoreRepository", "ContentResolver.delete() returned: $deletedCount")
 
                 val success = deletedCount > 0
                 if (success) {
-                    android.util.Log.d("MediaStoreRepository", "✓ Photo $photoId DELETED ($deletedCount rows)")
+                    android.util.Log.d("MediaStoreRepository", "✓ Media $photoId DELETED ($deletedCount rows)")
                 } else {
-                    android.util.Log.w("MediaStoreRepository", "⚠ Photo $photoId NOT deleted (0 rows affected)")
+                    android.util.Log.w("MediaStoreRepository", "⚠ Media $photoId NOT deleted (0 rows affected)")
                     android.util.Log.w("MediaStoreRepository", "⚠ On Android 13+, this requires user permission via system dialog")
                 }
 
@@ -142,7 +149,7 @@ class MediaStoreRepository @Inject constructor(
                         // This needs to be handled at the UI level with an ActivityResultLauncher
                         // For now, return false and log the issue
                         android.util.Log.e("MediaStoreRepository", "⚠ APP NEEDS TO REQUEST PERMISSION VIA SYSTEM DIALOG")
-                        android.util.Log.e("MediaStoreRepository", "⚠ This is normal on Android 13+ for photos not created by this app")
+                        android.util.Log.e("MediaStoreRepository", "⚠ This is normal on Android 13+ for media not created by this app")
                     }
                 }
                 false
@@ -293,6 +300,25 @@ class MediaStoreRepository @Inject constructor(
     }
 
     private fun queryAllPhotos(): List<Photo> {
+        val mediaItems = mutableListOf<Photo>()
+
+        // Query images
+        val images = queryImages()
+        android.util.Log.d("MediaStoreRepository", "Loaded ${images.size} images")
+        mediaItems.addAll(images)
+
+        // Query videos
+        val videos = queryVideos()
+        android.util.Log.d("MediaStoreRepository", "Loaded ${videos.size} videos")
+        mediaItems.addAll(videos)
+
+        android.util.Log.d("MediaStoreRepository", "Total media items: ${mediaItems.size} (${images.size} images + ${videos.size} videos)")
+
+        // Sort by date taken (descending)
+        return mediaItems.sortedByDescending { it.dateTaken }
+    }
+
+    private fun queryImages(): List<Photo> {
         val projection = arrayOf(
             MediaStore.Images.Media._ID,
             MediaStore.Images.Media.DATE_TAKEN,
@@ -323,24 +349,86 @@ class MediaStoreRepository @Inject constructor(
                         id
                     )
 
-                    // Skip EXIF extraction here to avoid blocking
-                    // Location can be fetched later on-demand or in background
                     photos.add(
                         Photo(
                             id = id,
                             uri = contentUri.toString(),
                             dateTaken = dateTaken,
                             displayPath = displayName,
-                            location = null
+                            location = null,
+                            mediaType = com.thewalkersoft.rewindphotos.domain.model.MediaType.IMAGE
                         )
                     )
                 }
             }
         } catch (e: Exception) {
-            android.util.Log.e("MediaStoreRepository", "Error querying photos", e)
+            android.util.Log.e("MediaStoreRepository", "Error querying images", e)
         }
 
         return photos
+    }
+
+    private fun queryVideos(): List<Photo> {
+        android.util.Log.d("MediaStoreRepository", "=== QUERYING VIDEOS ===")
+        val projection = arrayOf(
+            MediaStore.Video.Media._ID,
+            MediaStore.Video.Media.DATE_TAKEN,
+            MediaStore.Video.Media.DISPLAY_NAME
+        )
+
+        val sortOrder = "${MediaStore.Video.Media.DATE_TAKEN} DESC"
+        val videos = mutableListOf<Photo>()
+
+        try {
+            val cursor = context.contentResolver.query(
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                projection,
+                null,
+                null,
+                sortOrder
+            )
+
+            if (cursor == null) {
+                android.util.Log.e("MediaStoreRepository", "Video cursor is null - permission might be missing")
+                return videos
+            }
+
+            cursor.use {
+                android.util.Log.d("MediaStoreRepository", "Video cursor count: ${cursor.count}")
+                val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
+                val dateTakenColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_TAKEN)
+                val displayNameColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
+
+                while (cursor.moveToNext()) {
+                    val id = cursor.getLong(idColumn)
+                    val dateTaken = cursor.getLong(dateTakenColumn)
+                    val displayName = cursor.getString(displayNameColumn) ?: "video"
+                    val contentUri = ContentUris.withAppendedId(
+                        MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                        id
+                    )
+
+                    videos.add(
+                        Photo(
+                            id = id,
+                            uri = contentUri.toString(),
+                            dateTaken = dateTaken,
+                            displayPath = displayName,
+                            location = null,
+                            mediaType = com.thewalkersoft.rewindphotos.domain.model.MediaType.VIDEO
+                        )
+                    )
+                    android.util.Log.d("MediaStoreRepository", "Loaded video: id=$id, name=$displayName")
+                }
+            }
+        } catch (e: SecurityException) {
+            android.util.Log.e("MediaStoreRepository", "SecurityException querying videos - permission not granted", e)
+        } catch (e: Exception) {
+            android.util.Log.e("MediaStoreRepository", "Error querying videos", e)
+        }
+
+        android.util.Log.d("MediaStoreRepository", "=== VIDEOS QUERY COMPLETE: ${videos.size} videos found ===")
+        return videos
     }
 
     /**
@@ -378,7 +466,8 @@ class MediaStoreRepository @Inject constructor(
     }
 
     private fun queryPhotoById(id: Long): Photo? {
-        val projection = arrayOf(
+        // Try to query as image first
+        val imageProjection = arrayOf(
             MediaStore.Images.Media._ID,
             MediaStore.Images.Media.DATE_TAKEN,
             MediaStore.Images.Media.DISPLAY_NAME
@@ -386,39 +475,83 @@ class MediaStoreRepository @Inject constructor(
         val selection = "${MediaStore.Images.Media._ID} = ?"
         val selectionArgs = arrayOf(id.toString())
 
-        return try {
+        try {
             context.contentResolver.query(
                 MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                projection,
+                imageProjection,
                 selection,
                 selectionArgs,
                 null
             )?.use { cursor ->
-                if (!cursor.moveToFirst()) return null
+                if (cursor.moveToFirst()) {
+                    val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+                    val dateTakenColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_TAKEN)
+                    val displayNameColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME)
 
-                val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
-                val dateTakenColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_TAKEN)
-                val displayNameColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME)
+                    val photoId = cursor.getLong(idColumn)
+                    val dateTaken = cursor.getLong(dateTakenColumn)
+                    val displayName = cursor.getString(displayNameColumn) ?: "photo"
+                    val contentUri = ContentUris.withAppendedId(
+                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                        photoId
+                    )
 
-                val photoId = cursor.getLong(idColumn)
-                val dateTaken = cursor.getLong(dateTakenColumn)
-                val displayName = cursor.getString(displayNameColumn) ?: "photo"
-                val contentUri = ContentUris.withAppendedId(
-                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                    photoId
-                )
-
-                Photo(
-                    id = photoId,
-                    uri = contentUri.toString(),
-                    dateTaken = dateTaken,
-                    displayPath = displayName,
-                    location = null
-                )
+                    return Photo(
+                        id = photoId,
+                        uri = contentUri.toString(),
+                        dateTaken = dateTaken,
+                        displayPath = displayName,
+                        location = null,
+                        mediaType = com.thewalkersoft.rewindphotos.domain.model.MediaType.IMAGE
+                    )
+                }
             }
         } catch (e: Exception) {
-            android.util.Log.e("MediaStoreRepository", "Error querying photo by id: $id", e)
-            null
+            android.util.Log.e("MediaStoreRepository", "Error querying image by id: $id", e)
         }
+
+        // If not found as image, try as video
+        val videoProjection = arrayOf(
+            MediaStore.Video.Media._ID,
+            MediaStore.Video.Media.DATE_TAKEN,
+            MediaStore.Video.Media.DISPLAY_NAME
+        )
+
+        try {
+            context.contentResolver.query(
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                videoProjection,
+                selection,
+                selectionArgs,
+                null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
+                    val dateTakenColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_TAKEN)
+                    val displayNameColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
+
+                    val videoId = cursor.getLong(idColumn)
+                    val dateTaken = cursor.getLong(dateTakenColumn)
+                    val displayName = cursor.getString(displayNameColumn) ?: "video"
+                    val contentUri = ContentUris.withAppendedId(
+                        MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                        videoId
+                    )
+
+                    return Photo(
+                        id = videoId,
+                        uri = contentUri.toString(),
+                        dateTaken = dateTaken,
+                        displayPath = displayName,
+                        location = null,
+                        mediaType = com.thewalkersoft.rewindphotos.domain.model.MediaType.VIDEO
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("MediaStoreRepository", "Error querying video by id: $id", e)
+        }
+
+        return null
     }
 }

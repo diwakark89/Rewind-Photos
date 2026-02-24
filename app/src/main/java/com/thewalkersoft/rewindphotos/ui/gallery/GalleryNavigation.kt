@@ -1,6 +1,5 @@
 package com.thewalkersoft.rewindphotos.ui.gallery
 
-import androidx.compose.ui.Modifier
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavType
@@ -18,24 +17,6 @@ const val GALLERY_ROUTE = "gallery"
 const val PHOTO_DETAIL_ROUTE = "photo_detail"
 const val PHOTO_URI_ARG = "photo_uri"
 const val PHOTO_DATE_ARG = "photo_date"
-
-/**
- * Add Gallery screen to navigation graph
- */
-fun NavGraphBuilder.galleryScreen(
-    navController: NavController,
-    hasPermission: Boolean = false
-) {
-    composable(route = GALLERY_ROUTE) {
-        GalleryScreen(
-            modifier = Modifier,
-            hasPermission = hasPermission,
-            onPhotoClick = { photo ->
-                navController.navigateToPhotoDetail(photo.uri, photo.dateTaken)
-            }
-        )
-    }
-}
 
 /**
  * Add Photo Detail screen to navigation graph
@@ -71,19 +52,5 @@ fun NavGraphBuilder.photoDetailScreen(
             onClose = { navController.navigateUp() }
         )
     }
-}
-
-/**
- * Navigate to Gallery screen
- */
-fun NavController.navigateToGallery() {
-    navigate(GALLERY_ROUTE)
-}
-
-/**
- * Navigate to Photo Detail screen
- */
-fun NavController.navigateToPhotoDetail(photoUri: String, photoDate: Long) {
-    navigate("$PHOTO_DETAIL_ROUTE?$PHOTO_URI_ARG=$photoUri&$PHOTO_DATE_ARG=$photoDate")
 }
 

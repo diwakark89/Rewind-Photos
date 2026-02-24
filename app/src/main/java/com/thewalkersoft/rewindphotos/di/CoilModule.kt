@@ -30,6 +30,10 @@ object CoilModule {
         @ApplicationContext context: Context
     ): ImageLoader {
         return ImageLoader.Builder(context)
+            // Add video frame decoder for video thumbnail support
+            .components {
+                add(coil.decode.VideoFrameDecoder.Factory())
+            }
             // Memory Cache: Store recently loaded images in RAM
             // 30% of app memory allows caching 150+ high-quality thumbnails
             .memoryCache {

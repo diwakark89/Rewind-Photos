@@ -6,15 +6,17 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,12 +24,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.thewalkersoft.rewindphotos.domain.model.Photo
@@ -241,6 +242,7 @@ private fun PhotoGrid(
 /**
  * Individual photo card with Material 3 design.
  * Displays the image using Coil's SubcomposeAsyncImage for efficient loading with progress indicator.
+ * For videos, launches the system video player on click instead of navigating.
  */
 @Composable
 private fun PhotoCard(
@@ -254,7 +256,24 @@ private fun PhotoCard(
         Card(
             modifier = Modifier
                 .fillMaxSize()
-                .clickable { onPhotoClick() },
+                .clickable {
+                    // Handle video vs photo click differently
+                    if (photo.mediaType == com.thewalkersoft.rewindphotos.domain.model.MediaType.VIDEO) {
+                        // Launch system video player for videos
+                        try {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                                setDataAndType(android.net.Uri.parse(photo.uri), "video/*")
+                                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            android.util.Log.e("GalleryScreen", "Failed to open video", e)
+                        }
+                    } else {
+                        // Navigate to photo detail for images
+                        onPhotoClick()
+                    }
+                },
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
             shape = MaterialTheme.shapes.medium
         ) {
@@ -298,6 +317,23 @@ private fun PhotoCard(
                         }
                     }
                 )
+
+                // Video indicator overlay
+                if (photo.mediaType == com.thewalkersoft.rewindphotos.domain.model.MediaType.VIDEO) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.3f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.PlayArrow,
+                            contentDescription = "Video",
+                            tint = Color.White,
+                            modifier = Modifier.size(48.dp)
+                        )
+                    }
+                }
             }
         }
     }

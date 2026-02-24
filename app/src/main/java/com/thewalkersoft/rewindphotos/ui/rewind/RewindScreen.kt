@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Card
@@ -930,11 +931,25 @@ private fun RewindPhotoItem(
             .combinedClickable(
                 onClick = {
                     // If in selection mode, toggle selection on click
-                    // Otherwise, open the photo
+                    // Otherwise, open the photo/video
                     if (isSelectionMode) {
                         onPhotoLongPress(photo.id)
                     } else {
-                        onPhotoClick(photo.id.toString())
+                        // For videos, launch system video player
+                        if (photo.mediaType == com.thewalkersoft.rewindphotos.domain.model.MediaType.VIDEO) {
+                            try {
+                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                                    setDataAndType(android.net.Uri.parse(photo.uri), "video/*")
+                                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                android.util.Log.e("RewindScreen", "Failed to open video", e)
+                            }
+                        } else {
+                            // For images, navigate to detail screen
+                            onPhotoClick(photo.id.toString())
+                        }
                     }
                 },
                 onLongClick = { onPhotoLongPress(photo.id) }
@@ -968,6 +983,23 @@ private fun RewindPhotoItem(
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
+
+                // Video indicator overlay (shown when not in selection mode)
+                if (!isSelectionMode && photo.mediaType == com.thewalkersoft.rewindphotos.domain.model.MediaType.VIDEO) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.3f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.PlayArrow,
+                            contentDescription = "Video",
+                            tint = White,
+                            modifier = Modifier.size(48.dp)
+                        )
+                    }
+                }
 
                 // Selection overlay
                 if (isSelectionMode) {
