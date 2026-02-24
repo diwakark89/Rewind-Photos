@@ -1,7 +1,16 @@
 package com.thewalkersoft.rewindphotos.ui.rewind
 
+import android.app.Activity
+import android.content.Intent
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.ActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,9 +34,14 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -65,14 +79,14 @@ import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.ImageRequest
 import coil.size.Precision
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.yield
 import com.thewalkersoft.rewindphotos.ui.theme.LightGray
 import com.thewalkersoft.rewindphotos.ui.theme.Orange
 import com.thewalkersoft.rewindphotos.ui.theme.RewindPhotosTheme
 import com.thewalkersoft.rewindphotos.ui.theme.TextDark
 import com.thewalkersoft.rewindphotos.ui.theme.TextMedium
 import com.thewalkersoft.rewindphotos.ui.theme.White
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.yield
 import java.util.Calendar
 import java.util.Locale
 
@@ -110,7 +124,43 @@ fun RewindScreen(
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val scrollRequest by viewModel.scrollRequest.collectAsStateWithLifecycle()
+    val selectedPhotos by viewModel.selectedPhotos.collectAsStateWithLifecycle()
+    val isSelectionMode by viewModel.isSelectionMode.collectAsStateWithLifecycle()
+    val deleteIntentSender by viewModel.deleteIntentSender.collectAsStateWithLifecycle()
     val lazyListState = rememberLazyListState()
+
+    // Handle back button - clear selection if in selection mode, otherwise exit app
+    BackHandler(enabled = isSelectionMode) {
+        viewModel.clearSelection()
+    }
+
+    // Activity result launcher for delete permission (Android 13+)
+    val deletePermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result: ActivityResult ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            android.util.Log.d("RewindScreen", "User granted delete permission")
+            viewModel.onDeletePermissionGranted()
+        } else {
+            android.util.Log.w("RewindScreen", "User denied delete permission")
+            viewModel.onDeletePermissionDenied()
+        }
+    }
+
+    // Launch delete permission dialog when intentSender is available
+    LaunchedEffect(deleteIntentSender) {
+        deleteIntentSender?.let { sender ->
+            try {
+                android.util.Log.d("RewindScreen", "Launching delete permission dialog")
+                val request = IntentSenderRequest.Builder(sender).build()
+                deletePermissionLauncher.launch(request)
+                viewModel.clearDeleteIntent()
+            } catch (e: Exception) {
+                android.util.Log.e("RewindScreen", "Error launching delete dialog: ${e.message}", e)
+                viewModel.clearDeleteIntent()
+            }
+        }
+    }
 
     when (val state = uiState) {
         is RewindUiState.Loading -> {
@@ -296,11 +346,38 @@ fun RewindScreen(
                         }
                     )
 
+                    // Selection Action Bar (shown when in selection mode) - NOW BELOW YEAR FILTER
+                    if (isSelectionMode) {
+                        RewindSelectionActionBar(
+                            selectedCount = selectedPhotos.size,
+                            totalPhotos = state.groupedPhotosData.sections.sumOf { it.photoCount },
+                            onSelectAll = { viewModel.selectAllPhotos() },
+                            onShare = {
+                                val uris = viewModel.getSelectedPhotoUris()
+                                sharePhotos(context, uris)
+                            },
+                            onDelete = {
+                                android.util.Log.d("RewindScreen", "DELETE BUTTON CLICKED - Selected: ${selectedPhotos.size} photos")
+                                showToast(context, "Deleting ${selectedPhotos.size} photos...")
+                                viewModel.deleteSelectedPhotos()
+                            },
+                            onCancel = { viewModel.clearSelection() }
+                        )
+                    }
+
                     // Month-grouped Content
                     RewindContent(
                         groupedPhotosData = state.groupedPhotosData,
                         lazyListState = lazyListState,
-                        onPhotoClick = onPhotoClick
+                        selectedPhotos = selectedPhotos,
+                        isSelectionMode = isSelectionMode,
+                        onPhotoClick = onPhotoClick,
+                        onPhotoLongPress = { photoId ->
+                            viewModel.togglePhotoSelection(photoId)
+                        },
+                        onSelectAllMonth = { year, month ->
+                            viewModel.selectAllPhotosInMonth(year, month)
+                        }
                     )
                 }
 
@@ -308,6 +385,148 @@ fun RewindScreen(
                 if (isScrolling) {
                     ScrollingLoadingOverlay(selectedYear, selectedMonth, selectedDay)
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Share multiple photos using Android intent
+ */
+private fun sharePhotos(context: android.content.Context, photoUris: List<String>) {
+    if (photoUris.isEmpty()) return
+
+    val uris = photoUris.mapNotNull { uriString ->
+        try {
+            android.net.Uri.parse(uriString)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    if (uris.isEmpty()) return
+
+    val shareIntent = Intent().apply {
+        action = Intent.ACTION_SEND_MULTIPLE
+        type = "image/*"
+        putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+
+    try {
+        context.startActivity(Intent.createChooser(shareIntent, "Share Photos"))
+    } catch (e: Exception) {
+        android.util.Log.e("RewindScreen", "Error sharing photos", e)
+    }
+}
+
+/**
+ * Show toast message
+ */
+private fun showToast(context: android.content.Context, message: String) {
+    android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+}
+
+/**
+ * Rewind selection action bar showing selected count and action buttons
+ */
+@Composable
+private fun RewindSelectionActionBar(
+    selectedCount: Int,
+    totalPhotos: Int,
+    onSelectAll: () -> Unit,
+    onShare: () -> Unit,
+    onDelete: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(Orange)
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f)
+        ) {
+            IconButton(
+                onClick = onCancel,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = "Cancel Selection",
+                    modifier = Modifier.size(28.dp),
+                    tint = White
+                )
+            }
+            Text(
+                text = "$selectedCount selected",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = White,
+                modifier = Modifier.padding(start = 8.dp)
+            )
+        }
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 8.dp)
+        ) {
+            // Select All with Checkbox
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable { onSelectAll() }
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+                Checkbox(
+                    checked = selectedCount == totalPhotos && totalPhotos > 0,
+                    onCheckedChange = null,
+                    modifier = Modifier.size(26.dp),
+                    colors = CheckboxDefaults.colors(
+                        checkedColor = White,
+                        uncheckedColor = White.copy(alpha = 0.7f)
+                    )
+                )
+                Text(
+                    text = "Select All",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = White,
+                    modifier = Modifier.padding(start = 6.dp)
+                )
+            }
+
+            // Share button
+            IconButton(
+                onClick = onShare,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Share,
+                    contentDescription = "Share",
+                    modifier = Modifier.size(26.dp),
+                    tint = White
+                )
+            }
+
+            // Delete button
+            IconButton(
+                onClick = onDelete,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Delete,
+                    contentDescription = "Delete",
+                    modifier = Modifier.size(26.dp),
+                    tint = White
+                )
             }
         }
     }
@@ -474,8 +693,12 @@ private fun RewindYearChip(
 private fun RewindContent(
     groupedPhotosData: com.thewalkersoft.rewindphotos.domain.model.GroupedPhotosData,
     lazyListState: LazyListState,
+    selectedPhotos: Set<Long>,
+    isSelectionMode: Boolean,
     onPhotoClick: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onPhotoLongPress: (Long) -> Unit = {},
+    onSelectAllMonth: (Int, Int) -> Unit = { _, _ -> }
 ) {
     val sections = groupedPhotosData.sections
 
@@ -494,7 +717,11 @@ private fun RewindContent(
             val section = sections[sectionIndex]
             RewindMonthSection(
                 monthSection = section,
-                onPhotoClick = onPhotoClick
+                selectedPhotos = selectedPhotos,
+                isSelectionMode = isSelectionMode,
+                onPhotoClick = onPhotoClick,
+                onPhotoLongPress = onPhotoLongPress,
+                onSelectAllMonth = onSelectAllMonth
             )
         }
     }
@@ -507,8 +734,12 @@ private fun RewindContent(
 @Composable
 private fun RewindMonthSection(
     monthSection: com.thewalkersoft.rewindphotos.domain.model.MonthSection,
+    selectedPhotos: Set<Long>,
+    isSelectionMode: Boolean,
     onPhotoClick: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onPhotoLongPress: (Long) -> Unit = {},
+    onSelectAllMonth: (Int, Int) -> Unit = { _, _ -> }
 ) {
     val monthNames = listOf(
         "January", "February", "March", "April", "May", "June",
@@ -555,37 +786,74 @@ private fun RewindMonthSection(
 
     Column(modifier = modifier.fillMaxWidth()) {
         // Month Header with Location and Memory Count
-        Column(modifier = Modifier.padding(bottom = 12.dp)) {
-            Text(
-                text = "$monthName ${monthSection.year}",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextDark
-            )
-
-            // Location subtitle (if available)
-            if (!monthSection.location.isNullOrEmpty()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = monthSection.location,
+                    text = "$monthName ${monthSection.year}",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextDark
+                )
+
+                // Location subtitle (if available)
+                if (!monthSection.location.isNullOrEmpty()) {
+                    Text(
+                        text = monthSection.location,
+                        fontSize = 12.sp,
+                        color = TextMedium,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+
+                // Memory count
+                Text(
+                    text = "${monthSection.photoCount} memories",
                     fontSize = 12.sp,
                     color = TextMedium,
-                    modifier = Modifier.padding(top = 2.dp)
+                    modifier = Modifier.padding(top = 4.dp)
                 )
             }
 
-            // Memory count
-            Text(
-                text = "${monthSection.photoCount} memories",
-                fontSize = 12.sp,
-                color = TextMedium,
-                modifier = Modifier.padding(top = 4.dp)
-            )
+            // Select All checkbox for this month (only in selection mode)
+            if (isSelectionMode) {
+                val monthPhotosIds = monthSection.photos.map { it.id }.toSet()
+                val allPhotosInMonthSelected = monthPhotosIds.all { it in selectedPhotos }
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable {
+                            onSelectAllMonth(monthSection.year, monthSection.month)
+                        }
+                        .padding(8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Checkbox(
+                        checked = allPhotosInMonthSelected,
+                        onCheckedChange = null,
+                        modifier = Modifier.size(28.dp),
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = Orange,
+                            uncheckedColor = Color.Gray
+                        )
+                    )
+                }
+            }
         }
 
         // Photo Grid
         RewindPhotoGrid(
             photos = monthSection.photos.take(visiblePhotoCount),
-            onPhotoClick = onPhotoClick
+            selectedPhotos = selectedPhotos,
+            isSelectionMode = isSelectionMode,
+            onPhotoClick = onPhotoClick,
+            onPhotoLongPress = onPhotoLongPress
         )
     }
 }
@@ -596,8 +864,11 @@ private fun RewindMonthSection(
 @Composable
 private fun RewindPhotoGrid(
     photos: List<com.thewalkersoft.rewindphotos.domain.model.Photo>,
+    selectedPhotos: Set<Long>,
+    isSelectionMode: Boolean,
     onPhotoClick: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onPhotoLongPress: (Long) -> Unit = {}
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -614,7 +885,10 @@ private fun RewindPhotoGrid(
                     key(photo.id) {
                         RewindPhotoItem(
                             photo = photo,
+                            isSelected = photo.id in selectedPhotos,
+                            isSelectionMode = isSelectionMode,
                             onPhotoClick = onPhotoClick,
+                            onPhotoLongPress = onPhotoLongPress,
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -631,12 +905,17 @@ private fun RewindPhotoGrid(
 /**
  * Rewind photo item card - optimized for performance with lazy loading and aggressive caching
  * Uses adaptive sizing with aspectRatio for responsive 3x3 grid
+ * Supports long-press selection with visual feedback
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun RewindPhotoItem(
     photo: com.thewalkersoft.rewindphotos.domain.model.Photo,
+    isSelected: Boolean,
+    isSelectionMode: Boolean,
     onPhotoClick: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onPhotoLongPress: (Long) -> Unit = {}
 ) {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
@@ -648,7 +927,18 @@ private fun RewindPhotoItem(
         modifier = modifier
             .fillMaxWidth()
             .aspectRatio(1f)
-            .clickable { onPhotoClick(photo.id.toString()) }
+            .combinedClickable(
+                onClick = {
+                    // If in selection mode, toggle selection on click
+                    // Otherwise, open the photo
+                    if (isSelectionMode) {
+                        onPhotoLongPress(photo.id)
+                    } else {
+                        onPhotoClick(photo.id.toString())
+                    }
+                },
+                onLongClick = { onPhotoLongPress(photo.id) }
+            )
     ) {
         val imageRequest = remember(photo.id, cellSizePx) {
             ImageRequest.Builder(context)
@@ -667,7 +957,9 @@ private fun RewindPhotoItem(
             colors = CardDefaults.cardColors(
                 containerColor = Color(0xFFF5F5F5)
             ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            elevation = CardDefaults.cardElevation(
+                defaultElevation = if (isSelected) 8.dp else 0.dp
+            )
         ) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 AsyncImage(
@@ -676,6 +968,41 @@ private fun RewindPhotoItem(
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
+
+                // Selection overlay
+                if (isSelectionMode) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                if (isSelected)
+                                    Orange.copy(alpha = 0.3f)
+                                else
+                                    Color.Transparent
+                            )
+                    )
+
+                    // Checkbox in corner
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(4.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(White.copy(alpha = 0.9f))
+                    ) {
+                        Checkbox(
+                            checked = isSelected,
+                            onCheckedChange = null,
+                            modifier = Modifier
+                                .size(24.dp)
+                                .padding(2.dp),
+                            colors = CheckboxDefaults.colors(
+                                checkedColor = Orange,
+                                uncheckedColor = Color.Gray
+                            )
+                        )
+                    }
+                }
             }
         }
     }

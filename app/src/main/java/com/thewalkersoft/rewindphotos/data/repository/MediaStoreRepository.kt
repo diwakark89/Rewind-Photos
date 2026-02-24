@@ -1,9 +1,14 @@
 package com.thewalkersoft.rewindphotos.data.repository
 
+import android.app.Activity
+import android.app.RecoverableSecurityException
 import android.content.ContentUris
 import android.content.Context
 import android.graphics.BitmapFactory
+import android.os.Build
 import android.provider.MediaStore
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.IntentSenderRequest
 import com.thewalkersoft.rewindphotos.data.util.PerceptualHashUtils
 import com.thewalkersoft.rewindphotos.di.DefaultDispatcher
 import com.thewalkersoft.rewindphotos.di.IoDispatcher
@@ -102,28 +107,187 @@ class MediaStoreRepository @Inject constructor(
     override suspend fun deletePhoto(photoId: Long): Boolean {
         return withContext(ioDispatcher) {
             try {
-                val selection = "${MediaStore.Images.Media._ID} = ?"
-                val selectionArgs = arrayOf(photoId.toString())
-                val deletedCount = context.contentResolver.delete(
+                android.util.Log.d("MediaStoreRepository", "=== DELETE PHOTO STARTED ===")
+                android.util.Log.d("MediaStoreRepository", "Photo ID: $photoId")
+                android.util.Log.d("MediaStoreRepository", "Android API Level: ${Build.VERSION.SDK_INT}")
+
+                val uri = ContentUris.withAppendedId(
                     MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                    selection,
-                    selectionArgs
+                    photoId
                 )
-                deletedCount > 0
+
+                android.util.Log.d("MediaStoreRepository", "Photo URI: $uri")
+                android.util.Log.d("MediaStoreRepository", "Executing ContentResolver.delete()")
+
+                val deletedCount = context.contentResolver.delete(uri, null, null)
+
+                android.util.Log.d("MediaStoreRepository", "ContentResolver.delete() returned: $deletedCount")
+
+                val success = deletedCount > 0
+                if (success) {
+                    android.util.Log.d("MediaStoreRepository", "✓ Photo $photoId DELETED ($deletedCount rows)")
+                } else {
+                    android.util.Log.w("MediaStoreRepository", "⚠ Photo $photoId NOT deleted (0 rows affected)")
+                    android.util.Log.w("MediaStoreRepository", "⚠ On Android 13+, this requires user permission via system dialog")
+                }
+
+                success
+            } catch (securityException: SecurityException) {
+                android.util.Log.e("MediaStoreRepository", "✗ SecurityException: ${securityException.message}")
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val recoverableSecurityException = securityException as? RecoverableSecurityException
+                    if (recoverableSecurityException != null) {
+                        android.util.Log.w("MediaStoreRepository", "⚠ RecoverableSecurityException - Need to request user permission")
+                        // This needs to be handled at the UI level with an ActivityResultLauncher
+                        // For now, return false and log the issue
+                        android.util.Log.e("MediaStoreRepository", "⚠ APP NEEDS TO REQUEST PERMISSION VIA SYSTEM DIALOG")
+                        android.util.Log.e("MediaStoreRepository", "⚠ This is normal on Android 13+ for photos not created by this app")
+                    }
+                }
+                false
             } catch (e: Exception) {
+                android.util.Log.e("MediaStoreRepository", "✗ Exception in deletePhoto: ${e.message}", e)
+                e.printStackTrace()
                 false
             }
         }
     }
 
+    /**
+     * Delete photo using direct ContentResolver delete (Android 12 and below)
+     */
+    private fun deletePhotoOlderAndroid(photoId: Long): Boolean {
+        return try {
+            android.util.Log.d("MediaStoreRepository", "Using deletePhotoOlderAndroid method for ID: $photoId")
+
+            val selection = "${MediaStore.Images.Media._ID} = ?"
+            val selectionArgs = arrayOf(photoId.toString())
+
+            val deletedCount = context.contentResolver.delete(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                selection,
+                selectionArgs
+            )
+
+            val success = deletedCount > 0
+            android.util.Log.d("MediaStoreRepository", "Older Android delete result: deleted $deletedCount rows, success=$success")
+            success
+        } catch (e: Exception) {
+            android.util.Log.e("MediaStoreRepository", "Error in deletePhotoOlderAndroid: ${e.message}", e)
+            false
+        }
+    }
+
+    /**
+     * Delete photo using MediaStore.createDeleteRequest (Android 13+)
+     * This returns a PendingIntent that needs to be launched by the Activity
+     * For now, we'll try the direct delete method as fallback
+     */
+    private fun deletePhotoAndroid13Plus(photoId: Long): Boolean {
+        return try {
+            android.util.Log.d("MediaStoreRepository", "Using deletePhotoAndroid13Plus method for ID: $photoId")
+
+
+            // Try Method 1: Direct ContentResolver delete (may fail on Android 13+)
+            val selection = "${MediaStore.Images.Media._ID} = ?"
+            val selectionArgs = arrayOf(photoId.toString())
+
+            try {
+                val deletedCount = context.contentResolver.delete(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    selection,
+                    selectionArgs
+                )
+
+                if (deletedCount > 0) {
+                    android.util.Log.d("MediaStoreRepository", "Android 13+ delete result: deleted $deletedCount rows")
+                    return true
+                } else {
+                    android.util.Log.d("MediaStoreRepository", "ContentResolver delete returned 0 rows, trying file-based deletion")
+                }
+            } catch (e: Exception) {
+                android.util.Log.d("MediaStoreRepository", "ContentResolver delete failed: ${e.message}, trying file-based deletion")
+            }
+
+            // Try Method 2: Get the file path and delete directly
+            try {
+                val filePath = getPhotoFilePath(photoId)
+                if (filePath != null) {
+                    val file = java.io.File(filePath)
+                    if (file.exists()) {
+                        val deleted = file.delete()
+                        android.util.Log.d("MediaStoreRepository", "File-based deletion: file deleted=$deleted for path: $filePath")
+
+                        // Also delete from MediaStore
+                        try {
+                            context.contentResolver.delete(
+                                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                                selection,
+                                selectionArgs
+                            )
+                        } catch (e: Exception) {
+                            android.util.Log.d("MediaStoreRepository", "MediaStore entry cleanup failed: ${e.message}")
+                        }
+
+                        return deleted
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MediaStoreRepository", "Error in file-based deletion: ${e.message}", e)
+            }
+
+            false
+        } catch (e: Exception) {
+            android.util.Log.e("MediaStoreRepository", "Error in deletePhotoAndroid13Plus: ${e.message}", e)
+            false
+        }
+    }
+
+    /**
+     * Get the file path for a photo from its URI
+     */
+    private fun getPhotoFilePath(photoId: Long): String? {
+        return try {
+            val uri = ContentUris.withAppendedId(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                photoId
+            )
+
+            // Try to get the file path using MediaStore data column
+            val projection = arrayOf(MediaStore.Images.Media.DATA)
+            context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val dataColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA)
+                    cursor.getString(dataColumn)
+                } else null
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("MediaStoreRepository", "Error getting photo file path: ${e.message}", e)
+            null
+        }
+    }
+
     override suspend fun deletePhotos(photoIds: List<Long>): Int {
         return withContext(ioDispatcher) {
+            android.util.Log.d("MediaStoreRepository", "=== BATCH DELETE STARTED ===")
+            android.util.Log.d("MediaStoreRepository", "Total photos to delete: ${photoIds.size}")
+            android.util.Log.d("MediaStoreRepository", "Photo IDs: $photoIds")
+
             var deletedCount = 0
-            for (photoId in photoIds) {
-                if (deletePhoto(photoId)) {
-                    deletedCount++
+            for ((index, photoId) in photoIds.withIndex()) {
+                android.util.Log.d("MediaStoreRepository", "Deleting ${index + 1}/${photoIds.size}: ID=$photoId")
+                try {
+                    if (deletePhoto(photoId)) {
+                        deletedCount++
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("MediaStoreRepository", "Exception for photo $photoId: ${e.message}", e)
                 }
             }
+
+            android.util.Log.d("MediaStoreRepository", "=== BATCH DELETE COMPLETED ===")
+            android.util.Log.d("MediaStoreRepository", "Result: $deletedCount/${photoIds.size} photos deleted")
             deletedCount
         }
     }

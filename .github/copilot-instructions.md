@@ -10,6 +10,7 @@
 - **Modifiers:** Always pass a `modifier: Modifier = Modifier` as the first optional parameter to composables.
 - **Performance:** Use `remember` and `derivedStateOf` to optimize recomposition. Use `LazyColumn` for long lists.
 - **Resources:** Use `stringResource()`, `dimensionResource()`, and `painterResource()` instead of hardcoded values.
+- **Jetpack Preview:** Try to add @Preview code in every composable function.
 
 ## Architecture & State
 - **ViewModel:** Use `collectAsStateWithLifecycle()` for observing Flow/StateFlow in composables.
@@ -33,3 +34,9 @@
 - **Observing State:** In Composables, use `val state by viewModel.uiState.collectAsStateWithLifecycle()`.
 - **Events:** UI actions should call ViewModel functions directly (e.g., `viewModel.onNameChanged(newName)`).
 - **Side Effects:** Use `LaunchedEffect` for one-time events like navigation or showing Snackbars.
+
+## Coding Practise
+- **Classes:** Instead of creating one big class it should brake it down in small classes.
+- **Functions:** Try to create the smaller functions.
+- **Re-Usability:** Try to create the function in such a way so it can be reused existing code.
+- **Grouping:** When creating grouping multiple elements try to put them in function as then use those function to display the elements.
