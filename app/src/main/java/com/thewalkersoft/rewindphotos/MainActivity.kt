@@ -43,8 +43,8 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             RewindPhotosTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { _ ->
-                    PermissionAwareApp()
+                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                    PermissionAwareApp(modifier = Modifier.padding(innerPadding))
                 }
             }
         }
@@ -57,7 +57,7 @@ class MainActivity : ComponentActivity() {
  */
 @Composable
 @Suppress("DEPRECATION")
-private fun PermissionAwareApp() {
+private fun PermissionAwareApp(modifier: Modifier = Modifier) {
     val permissionState = remember { mutableStateOf(false) }
     val activity = LocalContext.current as? ComponentActivity
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -141,7 +141,7 @@ private fun PermissionAwareApp() {
         }
     }
 
-    RewindPhotosApp(hasPermission = permissionState.value)
+    RewindPhotosApp(hasPermission = permissionState.value, modifier = modifier)
 }
 
 

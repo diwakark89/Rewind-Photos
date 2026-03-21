@@ -1,49 +1,71 @@
 package com.thewalkersoft.rewindphotos.ui.gallery
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import coil.compose.SubcomposeAsyncImage
+import coil.compose.AsyncImage
+import coil.imageLoader
 import coil.request.ImageRequest
+import com.thewalkersoft.rewindphotos.domain.model.GroupedPhotosData
+import com.thewalkersoft.rewindphotos.domain.model.MonthSection
 import com.thewalkersoft.rewindphotos.domain.model.Photo
+import com.thewalkersoft.rewindphotos.ui.theme.LightGray
 import com.thewalkersoft.rewindphotos.ui.theme.RewindPhotosTheme
+import com.thewalkersoft.rewindphotos.ui.theme.TextDark
+import com.thewalkersoft.rewindphotos.ui.theme.TextMedium
+import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 /**
- * Gallery screen displaying a grid of photos.
- * Uses LazyVerticalGrid for efficient scrolling with 3 columns.
+ * Gallery screen displaying photos organized by month sections.
+ * Uses LazyColumn with month headers for better organization.
  * Integrates with GalleryViewModel to fetch and display photos from MediaStore.
  *
  * Features:
- * - Displays photos in a 3-column grid layout
+ * - Displays photos grouped by month with headers
  * - Shows newest photos first (sorted by date taken descending)
  * - Lazy loading with stable keys for optimal performance
  * - Material 3 card design with proper spacing
@@ -117,8 +139,8 @@ internal fun GalleryScreenContent(
             }
 
             is GalleryUiState.Success -> {
-                PhotoGrid(
-                    photos = uiState.photos,
+                PhotosByMonth(
+                    groupedPhotosData = uiState.groupedPhotosData,
                     onPhotoClick = onPhotoClick,
                     modifier = Modifier.fillMaxSize()
                 )
@@ -212,51 +234,155 @@ private fun ErrorState(
 }
 
 /**
- * LazyVerticalGrid displaying photos in 3 columns.
- * Each photo is displayed as a Material 3 Card with async image loading.
+ * LazyColumn displaying photos grouped by month with headers
  */
 @Composable
-private fun PhotoGrid(
+private fun PhotosByMonth(
     modifier: Modifier = Modifier,
-    photos: List<Photo>,
-    onPhotoClick: (Photo) -> Unit = {}
+    groupedPhotosData: GroupedPhotosData,
+    onPhotoClick: (Photo) -> Unit
 ) {
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(3),
-        modifier = modifier.padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+    val sections = groupedPhotosData.sections
+
+    LazyColumn(
+        modifier = modifier
+            .fillMaxSize()
+            .background(LightGray),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp)
     ) {
         items(
-            items = photos,
-            key = { photo -> photo.id }
-        ) { photo ->
-            PhotoCard(
-                photo = photo,
-                onPhotoClick = { onPhotoClick(photo) }
+            items = sections,
+            key = { section -> "${section.year}_${section.month}" }
+        ) { section ->
+            GalleryMonthSection(
+                monthSection = section,
+                onPhotoClick = onPhotoClick
             )
         }
     }
 }
 
 /**
- * Individual photo card with Material 3 design.
- * Displays the image using Coil's SubcomposeAsyncImage for efficient loading with progress indicator.
- * For videos, launches the system video player on click instead of navigating.
+ * Month section composable showing month header and photo grid
  */
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
-private fun PhotoCard(
+private fun GalleryMonthSection(
+    monthSection: MonthSection,
+    onPhotoClick: (Photo) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val monthNames = listOf(
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    )
+    val monthName = monthNames[monthSection.month]
+    val context = LocalContext.current
+    val imageLoader = context.imageLoader
+
+    val totalPhotos = monthSection.photos.size
+    var visiblePhotoCount by remember(monthSection.year, monthSection.month) {
+        mutableIntStateOf(kotlin.math.min(12, totalPhotos))
+    }
+
+    LaunchedEffect(monthSection.year, monthSection.month, totalPhotos) {
+        var currentCount = visiblePhotoCount
+        while (currentCount < totalPhotos) {
+            delay(32)
+            currentCount = kotlin.math.min(currentCount + 12, totalPhotos)
+            visiblePhotoCount = currentCount
+        }
+    }
+
+    // Preload first few photos from this month section when it becomes visible
+    LaunchedEffect(monthSection.year, monthSection.month) {
+        monthSection.photos.take(6).forEach { photo ->
+            try {
+                val imageRequest = ImageRequest.Builder(context)
+                    .data(photo.uri)
+                    .memoryCacheKey("photo_${photo.id}")
+                    .diskCacheKey("photo_${photo.id}")
+                    .size(200, 200)
+                    .build()
+                imageLoader.enqueue(imageRequest)
+            } catch (_: Exception) {
+                // Silent fail - preloading is non-critical
+            }
+        }
+    }
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        // Month Header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "$monthName ${monthSection.year}",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextDark
+                )
+                if (monthSection.location != null) {
+                    Text(
+                        text = monthSection.location,
+                        fontSize = 14.sp,
+                        color = TextMedium,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+            }
+
+            // Photo count
+            Text(
+                text = "${monthSection.photoCount} ${if (monthSection.photoCount == 1) "photo" else "photos"}",
+                fontSize = 14.sp,
+                color = TextMedium
+            )
+        }
+
+        // Photo Grid using FlowRow for better layout (not nested lazy)
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            maxItemsInEachRow = 3
+        ) {
+            monthSection.photos.take(visiblePhotoCount).forEach { photo ->
+                GalleryPhotoCard(
+                    photo = photo,
+                    onPhotoClick = { onPhotoClick(photo) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Individual photo card with Material 3 design.
+ * Displays the image using AsyncImage for efficient loading.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun GalleryPhotoCard(
     modifier: Modifier = Modifier,
     photo: Photo,
     onPhotoClick: () -> Unit = {}
 ) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
 
-    Box(modifier = modifier.size(120.dp)) {
-        Card(
-            modifier = Modifier
-                .fillMaxSize()
-                .clickable {
+    Box(
+        modifier = modifier
+            .aspectRatio(1f)
+            .clip(RoundedCornerShape(8.dp))
+            .combinedClickable(
+                onClick = {
                     // Handle video vs photo click differently
                     if (photo.mediaType == com.thewalkersoft.rewindphotos.domain.model.MediaType.VIDEO) {
                         // Launch system video player for videos
@@ -273,67 +399,36 @@ private fun PhotoCard(
                         // Navigate to photo detail for images
                         onPhotoClick()
                     }
-                },
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-            shape = MaterialTheme.shapes.medium
-        ) {
+                }
+            )
+    ) {
+        // Async image loading using Coil
+        AsyncImage(
+            model = ImageRequest.Builder(context)
+                .data(photo.uri)
+                .memoryCacheKey("photo_${photo.id}")
+                .diskCacheKey("photo_${photo.id}")
+                .crossfade(true)
+                .build(),
+            contentDescription = "Photo taken on ${formatDate(photo.dateTaken)}",
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop
+        )
+
+        // Video indicator overlay
+        if (photo.mediaType == com.thewalkersoft.rewindphotos.domain.model.MediaType.VIDEO) {
             Box(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.3f)),
                 contentAlignment = Alignment.Center
             ) {
-                // Async image loading using Coil with progress indicator and cache keys
-                SubcomposeAsyncImage(
-                    model = ImageRequest.Builder(context)
-                        .data(photo.uri)
-                        .memoryCacheKey("photo_${photo.id}")
-                        .diskCacheKey("photo_${photo.id}")
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = "Photo taken on ${formatDate(photo.dateTaken)}",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                    loading = {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(32.dp),
-                                strokeWidth = 2.dp
-                            )
-                        }
-                    },
-                    error = {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(MaterialTheme.colorScheme.errorContainer),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                "Failed to load",
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        }
-                    }
+                Icon(
+                    imageVector = Icons.Filled.PlayArrow,
+                    contentDescription = "Video",
+                    tint = Color.White,
+                    modifier = Modifier.size(32.dp)
                 )
-
-                // Video indicator overlay
-                if (photo.mediaType == com.thewalkersoft.rewindphotos.domain.model.MediaType.VIDEO) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.3f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.PlayArrow,
-                            contentDescription = "Video",
-                            tint = Color.White,
-                            modifier = Modifier.size(48.dp)
-                        )
-                    }
-                }
             }
         }
     }
@@ -389,10 +484,19 @@ fun GalleryGridLoadingPreview() {
 @Composable
 fun GalleryGridSuccessPreview() {
     RewindPhotosTheme {
-        GalleryScreenContent(
-            modifier = Modifier.fillMaxSize(),
-            uiState = GalleryUiState.Success(photos = GalleryGridPreviewMockPhotos)
-        )
+        Surface {
+            GalleryScreenContent(
+                modifier = Modifier.fillMaxSize(),
+                uiState = GalleryUiState.Success(
+                    groupedPhotosData = GroupedPhotosData(
+                        sections = listOf(
+                            MonthSection(2024, 1, "New York", GalleryGridPreviewMockPhotos.take(5)),
+                            MonthSection(2024, 0, "San Francisco", GalleryGridPreviewMockPhotos.drop(5))
+                        )
+                    )
+                )
+            )
+        }
     }
 }
 
@@ -431,7 +535,7 @@ fun GalleryGridErrorPreview() {
 @Composable
 fun GalleryPhotoCardPreview() {
     RewindPhotosTheme {
-        PhotoCard(
+        GalleryPhotoCard(
             modifier = Modifier.size(120.dp),
             photo = GalleryGridPreviewMockPhotos[0]
         )

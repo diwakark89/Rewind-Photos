@@ -1,6 +1,6 @@
 package com.thewalkersoft.rewindphotos.ui.gallery
 
-import com.thewalkersoft.rewindphotos.domain.model.Photo
+import com.thewalkersoft.rewindphotos.domain.model.GroupedPhotosData
 
 /**
  * Sealed class representing the different UI states for the Gallery screen.
@@ -18,9 +18,9 @@ sealed class GalleryUiState {
     data object Empty : GalleryUiState()
 
     /**
-     * Success state - contains the list of loaded photos sorted by date taken (descending)
+     * Success state - contains grouped photos organized by month
      */
-    data class Success(val photos: List<Photo>) : GalleryUiState()
+    data class Success(val groupedPhotosData: GroupedPhotosData) : GalleryUiState()
 
     /**
      * Error state - contains error message and allows retry

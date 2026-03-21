@@ -3,8 +3,8 @@ package com.thewalkersoft.rewindphotos
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -23,13 +23,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import androidx.navigation.compose.rememberNavController
 import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
 import com.thewalkersoft.rewindphotos.ui.gallery.GALLERY_ROUTE
 import com.thewalkersoft.rewindphotos.ui.gallery.GalleryScreen
+import com.thewalkersoft.rewindphotos.ui.gallery.PHOTO_DATE_ARG
 import com.thewalkersoft.rewindphotos.ui.gallery.PHOTO_DETAIL_ROUTE
 import com.thewalkersoft.rewindphotos.ui.gallery.PHOTO_URI_ARG
-import com.thewalkersoft.rewindphotos.ui.gallery.PHOTO_DATE_ARG
 import com.thewalkersoft.rewindphotos.ui.gallery.photoDetailScreen
 import com.thewalkersoft.rewindphotos.ui.rewind.RewindScreen
 import com.thewalkersoft.rewindphotos.ui.selection.SelectionScreen
@@ -55,7 +55,8 @@ private const val SELECTION_ROUTE = "selection"
 @Composable
 fun RewindPhotosApp(
     navController: NavHostController = rememberNavController(),
-    hasPermission: Boolean = false
+    hasPermission: Boolean = false,
+    modifier: Modifier = Modifier
 ) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -71,7 +72,7 @@ fun RewindPhotosApp(
     }
 
     Scaffold(
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
         bottomBar = {
             if (hasPermission) {
                 NavigationBar {
