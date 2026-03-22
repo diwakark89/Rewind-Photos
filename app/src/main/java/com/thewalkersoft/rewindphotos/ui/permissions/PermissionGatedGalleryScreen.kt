@@ -12,24 +12,25 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.thewalkersoft.rewindphotos.domain.util.PermissionUtils
 import com.thewalkersoft.rewindphotos.ui.gallery.GalleryScreen
+import com.thewalkersoft.rewindphotos.ui.theme.RewindPhotosTheme
 
 /**
  * Composable that handles permission requests and shows appropriate UI.
@@ -185,6 +186,16 @@ private fun PermissionDeniedScreen(
 
         TextButton(onClick = onRetry) {
             Text("Try Again")
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PermissionGatedGalleryScreenPreview() {
+    RewindPhotosTheme {
+        Surface {
+            PermissionRequestScreen()
         }
     }
 }

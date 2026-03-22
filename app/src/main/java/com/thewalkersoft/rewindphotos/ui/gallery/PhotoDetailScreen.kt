@@ -13,17 +13,22 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.thewalkersoft.rewindphotos.domain.model.MediaType
 import com.thewalkersoft.rewindphotos.domain.model.Photo
+import com.thewalkersoft.rewindphotos.ui.preview.PreviewData
+import com.thewalkersoft.rewindphotos.ui.theme.RewindPhotosTheme
 
 /**
  * Full-screen photo/video detail screen.
@@ -42,7 +47,7 @@ fun PhotoDetailScreen(
         if (photo.mediaType == MediaType.VIDEO) {
             try {
                 val intent = Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(android.net.Uri.parse(photo.uri), "video/*")
+                    setDataAndType(photo.uri.toUri(), "video/*")
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
                 context.startActivity(intent)
@@ -104,5 +109,18 @@ fun PhotoDetailScreen(
         }
     }
     } // End of if (photo.mediaType != MediaType.VIDEO)
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PhotoDetailScreenPreview() {
+    RewindPhotosTheme {
+        Surface {
+            PhotoDetailScreen(
+                photo = PreviewData.photos.first(),
+                onClose = {}
+            )
+        }
+    }
 }
 

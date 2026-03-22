@@ -23,14 +23,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Card
@@ -38,8 +36,8 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -55,16 +53,20 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.thewalkersoft.rewindphotos.domain.model.Photo
+import com.thewalkersoft.rewindphotos.ui.preview.PreviewData
+import com.thewalkersoft.rewindphotos.ui.theme.LightGray
 import com.thewalkersoft.rewindphotos.ui.theme.Orange
+import com.thewalkersoft.rewindphotos.ui.theme.RewindPhotosTheme
 import com.thewalkersoft.rewindphotos.ui.theme.TextDark
 import com.thewalkersoft.rewindphotos.ui.theme.TextMedium
 import com.thewalkersoft.rewindphotos.ui.theme.White
-import com.thewalkersoft.rewindphotos.ui.theme.LightGray
 import java.util.Calendar
 
 /**
@@ -203,7 +205,7 @@ private fun SelectionScreenContent(
     selectedMonth: Int,
     selectedDay: Int,
     availableYears: List<Int>,
-    allPhotos: List<com.thewalkersoft.rewindphotos.domain.model.Photo>,
+    allPhotos: List<Photo>,
     onExitSelectionMode: () -> Unit = {},
     onShareSelected: () -> Unit = {},
     onDeleteSelected: () -> Unit = {},
@@ -474,7 +476,7 @@ private fun SelectionRewindContent(
     selectedYear: Int,
     selectedMonth: Int,
     selectedDay: Int,
-    allPhotos: List<com.thewalkersoft.rewindphotos.domain.model.Photo>,
+    allPhotos: List<Photo>,
     selectedPhotos: List<String>,
     onPhotoToggle: (String) -> Unit,
     modifier: Modifier = Modifier
@@ -566,7 +568,7 @@ private fun SelectionRewindContent(
  */
 @Composable
 private fun SelectionMemoryGrid(
-    photos: List<com.thewalkersoft.rewindphotos.domain.model.Photo>,
+    photos: List<Photo>,
     selectedPhotos: List<String>,
     onPhotoToggle: (String) -> Unit,
     modifier: Modifier = Modifier
@@ -602,12 +604,12 @@ private fun SelectionMemoryGrid(
  */
 @Composable
 private fun SelectionMemoryItem(
-    photo: com.thewalkersoft.rewindphotos.domain.model.Photo,
+    photo: Photo,
     isSelected: Boolean,
     onToggle: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
 
     Card(
         modifier = modifier
@@ -762,20 +764,20 @@ private fun SelectionBottomBar(
     }
 }
 
-/**
- * Helper text showing selected count
- */
+
+@Preview(showBackground = true)
 @Composable
-private fun SelectionInfo(
-    selectedCount: Int,
-    modifier: Modifier = Modifier
-) {
-    if (selectedCount > 0) {
-        Text(
-            text = "Select items",
-            fontSize = 14.sp,
-            color = TextMedium,
-            modifier = modifier
-        )
+private fun SelectionScreenPreview() {
+    RewindPhotosTheme {
+        Surface {
+            SelectionScreenContent(
+                selectedPhotos = listOf(PreviewData.photos.first().id.toString()),
+                selectedYear = 2024,
+                selectedMonth = 1,
+                selectedDay = 1,
+                availableYears = PreviewData.availableYears,
+                allPhotos = PreviewData.photos
+            )
+        }
     }
 }

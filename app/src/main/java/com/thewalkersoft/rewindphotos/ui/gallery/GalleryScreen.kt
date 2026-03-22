@@ -43,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import coil.imageLoader
@@ -50,6 +51,7 @@ import coil.request.ImageRequest
 import com.thewalkersoft.rewindphotos.domain.model.GroupedPhotosData
 import com.thewalkersoft.rewindphotos.domain.model.MonthSection
 import com.thewalkersoft.rewindphotos.domain.model.Photo
+import com.thewalkersoft.rewindphotos.ui.preview.PreviewData
 import com.thewalkersoft.rewindphotos.ui.theme.LightGray
 import com.thewalkersoft.rewindphotos.ui.theme.RewindPhotosTheme
 import com.thewalkersoft.rewindphotos.ui.theme.TextDark
@@ -388,7 +390,7 @@ private fun GalleryPhotoCard(
                         // Launch system video player for videos
                         try {
                             val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
-                                setDataAndType(android.net.Uri.parse(photo.uri), "video/*")
+                                setDataAndType(photo.uri.toUri(), "video/*")
                                 addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                             }
                             context.startActivity(intent)
@@ -441,104 +443,23 @@ private fun formatDate(timestamp: Long): String {
     return try {
         val sdf = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
         sdf.format(Date(timestamp))
-    } catch (e: Exception) {
+    } catch (_: Exception) {
         "Unknown date"
     }
 }
 
-// ============= PREVIEW COMPOSABLES WITH MOCK DATA =============
-
-/**
- * Mock data for gallery preview testing
- */
-internal val GalleryGridPreviewMockPhotos = listOf(
-    Photo(1, "content://media/external/images/media/1", 1707873600000, "/storage/emulated/0/DCIM/Camera/IMG_20240214_085015.jpg"),
-    Photo(2, "content://media/external/images/media/2", 1707787200000, "/storage/emulated/0/DCIM/Camera/IMG_20240213_143022.jpg"),
-    Photo(3, "content://media/external/images/media/3", 1707700800000, "/storage/emulated/0/DCIM/Camera/IMG_20240212_092556.jpg"),
-    Photo(4, "content://media/external/images/media/4", 1707614400000, "/storage/emulated/0/DCIM/Camera/IMG_20240211_175430.jpg"),
-    Photo(5, "content://media/external/images/media/5", 1707528000000, "/storage/emulated/0/DCIM/Camera/IMG_20240210_063141.jpg"),
-    Photo(6, "content://media/external/images/media/6", 1707441600000, "/storage/emulated/0/DCIM/Camera/IMG_20240209_154522.jpg"),
-    Photo(7, "content://media/external/images/media/7", 1707355200000, "/storage/emulated/0/DCIM/Camera/IMG_20240208_130015.jpg"),
-    Photo(8, "content://media/external/images/media/8", 1707268800000, "/storage/emulated/0/DCIM/Camera/IMG_20240207_091842.jpg"),
-    Photo(9, "content://media/external/images/media/9", 1707182400000, "/storage/emulated/0/DCIM/Camera/IMG_20240206_175333.jpg"),
-)
-
-/**
- * Preview of the gallery grid in loading state
- */
 @Preview(showBackground = true, device = "id:pixel_5")
 @Composable
-fun GalleryGridLoadingPreview() {
-    RewindPhotosTheme {
-        GalleryScreenContent(
-            modifier = Modifier.fillMaxSize(),
-            uiState = GalleryUiState.Loading
-        )
-    }
-}
-
-/**
- * Preview of the gallery grid with mock photos in success state
- */
-@Preview(showBackground = true, device = "id:pixel_5")
-@Composable
-fun GalleryGridSuccessPreview() {
+private fun GalleryScreenPreview() {
     RewindPhotosTheme {
         Surface {
             GalleryScreenContent(
                 modifier = Modifier.fillMaxSize(),
                 uiState = GalleryUiState.Success(
-                    groupedPhotosData = GroupedPhotosData(
-                        sections = listOf(
-                            MonthSection(2024, 1, "New York", GalleryGridPreviewMockPhotos.take(5)),
-                            MonthSection(2024, 0, "San Francisco", GalleryGridPreviewMockPhotos.drop(5))
-                        )
-                    )
+                    groupedPhotosData = PreviewData.groupedPhotosData
                 )
             )
         }
-    }
-}
-
-/**
- * Preview of the gallery grid in empty state
- */
-@Preview(showBackground = true, device = "id:pixel_5")
-@Composable
-fun GalleryGridEmptyPreview() {
-    RewindPhotosTheme {
-        GalleryScreenContent(
-            modifier = Modifier.fillMaxSize(),
-            uiState = GalleryUiState.Empty
-        )
-    }
-}
-
-/**
- * Preview of the gallery grid in error state
- */
-@Preview(showBackground = true, device = "id:pixel_5")
-@Composable
-fun GalleryGridErrorPreview() {
-    RewindPhotosTheme {
-        GalleryScreenContent(
-            modifier = Modifier.fillMaxSize(),
-            uiState = GalleryUiState.Error(message = "Failed to load photos from device storage")
-        )
-    }
-}
-
-/**
- * Preview of individual photo card
- */
-@Preview(showBackground = true)
-@Composable
-fun GalleryPhotoCardPreview() {
-    RewindPhotosTheme {
-        GalleryPhotoCard(
-            modifier = Modifier.size(120.dp),
-            photo = GalleryGridPreviewMockPhotos[0]
-        )
     }
 }
 

@@ -1,6 +1,7 @@
 package com.thewalkersoft.rewindphotos.ui.rewind
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -74,12 +75,18 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.ImageRequest
 import coil.size.Precision
+import com.thewalkersoft.rewindphotos.domain.model.GroupedPhotosData
+import com.thewalkersoft.rewindphotos.domain.model.MediaType
+import com.thewalkersoft.rewindphotos.domain.model.MonthSection
+import com.thewalkersoft.rewindphotos.domain.model.Photo
+import com.thewalkersoft.rewindphotos.ui.preview.PreviewData
 import com.thewalkersoft.rewindphotos.ui.theme.LightGray
 import com.thewalkersoft.rewindphotos.ui.theme.Orange
 import com.thewalkersoft.rewindphotos.ui.theme.RewindPhotosTheme
@@ -394,13 +401,13 @@ fun RewindScreen(
 /**
  * Share multiple photos using Android intent
  */
-private fun sharePhotos(context: android.content.Context, photoUris: List<String>) {
+private fun sharePhotos(context: Context, photoUris: List<String>) {
     if (photoUris.isEmpty()) return
 
     val uris = photoUris.mapNotNull { uriString ->
         try {
-            android.net.Uri.parse(uriString)
-        } catch (e: Exception) {
+            uriString.toUri()
+        } catch (_: Exception) {
             null
         }
     }
@@ -424,7 +431,7 @@ private fun sharePhotos(context: android.content.Context, photoUris: List<String
 /**
  * Show toast message
  */
-private fun showToast(context: android.content.Context, message: String) {
+private fun showToast(context: Context, message: String) {
     android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
 }
 
@@ -692,7 +699,7 @@ private fun RewindYearChip(
  */
 @Composable
 private fun RewindContent(
-    groupedPhotosData: com.thewalkersoft.rewindphotos.domain.model.GroupedPhotosData,
+    groupedPhotosData: GroupedPhotosData,
     lazyListState: LazyListState,
     selectedPhotos: Set<Long>,
     isSelectionMode: Boolean,
@@ -734,7 +741,7 @@ private fun RewindContent(
  */
 @Composable
 private fun RewindMonthSection(
-    monthSection: com.thewalkersoft.rewindphotos.domain.model.MonthSection,
+    monthSection: MonthSection,
     selectedPhotos: Set<Long>,
     isSelectionMode: Boolean,
     onPhotoClick: (String) -> Unit,
@@ -864,7 +871,7 @@ private fun RewindMonthSection(
  */
 @Composable
 private fun RewindPhotoGrid(
-    photos: List<com.thewalkersoft.rewindphotos.domain.model.Photo>,
+    photos: List<Photo>,
     selectedPhotos: Set<Long>,
     isSelectionMode: Boolean,
     onPhotoClick: (String) -> Unit,
@@ -911,7 +918,7 @@ private fun RewindPhotoGrid(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun RewindPhotoItem(
-    photo: com.thewalkersoft.rewindphotos.domain.model.Photo,
+    photo: Photo,
     isSelected: Boolean,
     isSelectionMode: Boolean,
     onPhotoClick: (String) -> Unit,
@@ -936,11 +943,11 @@ private fun RewindPhotoItem(
                         onPhotoLongPress(photo.id)
                     } else {
                         // For videos, launch system video player
-                        if (photo.mediaType == com.thewalkersoft.rewindphotos.domain.model.MediaType.VIDEO) {
+                        if (photo.mediaType == MediaType.VIDEO) {
                             try {
-                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
-                                    setDataAndType(android.net.Uri.parse(photo.uri), "video/*")
-                                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                val intent = Intent(Intent.ACTION_VIEW).apply {
+                                    setDataAndType(photo.uri.toUri(), "video/*")
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                 }
                                 context.startActivity(intent)
                             } catch (e: Exception) {
@@ -985,7 +992,7 @@ private fun RewindPhotoItem(
                 )
 
                 // Video indicator overlay (shown when not in selection mode)
-                if (!isSelectionMode && photo.mediaType == com.thewalkersoft.rewindphotos.domain.model.MediaType.VIDEO) {
+                if (!isSelectionMode && photo.mediaType == MediaType.VIDEO) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -1121,7 +1128,32 @@ private fun ScrollingLoadingOverlay(
 private fun RewindScreenPreview() {
     RewindPhotosTheme {
         Surface {
-            RewindScreen()
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(White)
+            ) {
+                RewindDateNavigationBar(
+                    currentMonth = 1,
+                    currentDay = 14,
+                    onSettingsClick = {},
+                    onPreviousClick = {},
+                    onNextClick = {},
+                    onCalendarClick = {}
+                )
+                RewindYearFilterRow(
+                    years = PreviewData.availableYears,
+                    selectedYear = PreviewData.availableYears.first(),
+                    onYearSelected = {}
+                )
+                RewindContent(
+                    groupedPhotosData = PreviewData.groupedPhotosData,
+                    lazyListState = rememberLazyListState(),
+                    selectedPhotos = emptySet(),
+                    isSelectionMode = false,
+                    onPhotoClick = {}
+                )
+            }
         }
     }
 }

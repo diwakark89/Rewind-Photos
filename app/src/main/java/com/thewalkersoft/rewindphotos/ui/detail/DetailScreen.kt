@@ -16,14 +16,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
@@ -33,12 +34,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.thewalkersoft.rewindphotos.ui.theme.LightGray
 import com.thewalkersoft.rewindphotos.ui.theme.Orange
+import com.thewalkersoft.rewindphotos.ui.theme.RewindPhotosTheme
 import com.thewalkersoft.rewindphotos.ui.theme.TextDark
 import com.thewalkersoft.rewindphotos.ui.theme.TextMedium
-import com.thewalkersoft.rewindphotos.ui.theme.LightGray
 import com.thewalkersoft.rewindphotos.ui.theme.White
 
 /**
@@ -619,3 +622,12 @@ data class MemoryItemDetail(
     val filename: String
 )
 
+@Preview(showBackground = true)
+@Composable
+private fun DetailScreenPreview() {
+    RewindPhotosTheme {
+        Surface {
+            DetailScreen()
+        }
+    }
+}
